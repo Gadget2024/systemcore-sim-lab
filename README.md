@@ -4,6 +4,10 @@ A no-install, browser-based FRC learning simulator for Coach Greene. It demonstr
 
 This is a learning simulator, not an emulator of the SystemCore operating system or its exact electronics.
 
+## Before starting
+
+Install [Node.js 20 or newer](https://nodejs.org/) on the computer that will run the simulator.
+
 ## Start on Windows
 
 Double-click `Start Simulator.cmd`. Keep its window open, then browse to <http://localhost:4173>.
@@ -21,6 +25,26 @@ If `node` is not on PATH, use the Node executable bundled with Codex:
 ```powershell
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" server.mjs
 ```
+
+## Start on macOS
+
+Do not open the `.cmd` file; it is only for Windows.
+
+Double-click `Start Simulator.command`. A Terminal window will start the server and the simulator will open automatically in your browser. Keep the Terminal window open while using it.
+
+When the project was cloned with Git, the launcher should already be executable. If macOS instead reports a permissions problem, open Terminal in the project folder and run this once:
+
+```bash
+chmod +x "Start Simulator.command"
+```
+
+You can also start it manually from that folder:
+
+```bash
+node server.mjs
+```
+
+Then open <http://localhost:4173>.
 
 ## Drive the simulator
 
