@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#07111f" />
+    <meta name="description" content="A browser-based FRC drivetrain and Limelight learning simulator." />
+    <title>SystemCore Sim Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">SC</span>
+        <div>
+          <p class="eyebrow">FRC CONTROL LAB</p>
+          <h1>Coach Greene’s SystemCore Sim</h1>
+        </div>
+      </div>
+      <div class="connection" aria-live="polite">
+        <span class="status-dot"></span>
+        <span><strong>SIM LINK</strong><small id="loopStatus">20 ms loop</small></span>
+      </div>
+    </header>
+
+    <main>
+      <section class="driver-station" aria-label="Driver station controls">
+        <div class="station-state">
+          <span class="label">ROBOT STATE</span>
+          <strong id="robotState">DISABLED</strong>
+        </div>
+        <div class="mode-group" role="group" aria-label="Robot mode">
+          <button class="mode-button active" data-mode="disabled">Disabled</button>
+          <button class="mode-button" data-mode="teleop">Teleop</button>
+          <button class="mode-button" data-mode="auto">Auto: target</button>
+        </div>
+        <div class="station-actions">
+          <button id="resetButton" class="button secondary">Reset pose</button>
+          <button id="estopButton" class="button danger">E-stop</button>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <section class="field-card panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">DIGITAL TWIN</p>
+              <h2>Practice field</h2>
+            </div>
+            <div class="field-legend">
+              <span><i class="legend-robot"></i> Robot</span>
+              <span><i class="legend-target"></i> Vision target</span>
+            </div>
+          </div>
+          <div class="field-wrap">
+            <canvas id="field" aria-label="Top-down simulated FRC field"></canvas>
+            <div id="disabledOverlay" class="field-overlay">
+              <strong>Robot disabled</strong>
+              <span>Select Teleop or Auto to enable outputs</span>
+            </div>
+          </div>
+          <div class="field-footer">
+            <span id="poseReadout">X 2.20 m · Y 4.11 m · 0°</span>
+            <span id="collisionReadout">Boundary contacts 0</span>
+          </div>
+        </section>
+
+        <aside class="telemetry-column">
+          <section class="panel telemetry-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">NETWORKTABLES SHAPE</p>
+                <h2>Live telemetry</h2>
+              </div>
+              <span class="live-badge">LIVE</span>
+            </div>
+            <div class="metric-grid">
+              <article><span>Left wheel</span><strong id="leftSpeed">0.00</strong><small>m/s</small></article>
+              <article><span>Right wheel</span><strong id="rightSpeed">0.00</strong><small>m/s</small></article>
+              <article><span>Heading</span><strong id="headingValue">0.0</strong><small>deg</small></article>
+              <article><span>Battery</span><strong id="batteryValue">12.6</strong><small>volts</small></article>
+            </div>
+          </section>
+
+          <section class="panel limelight-panel">
+            <div class="panel-heading compact">
+              <div>
+                <p class="eyebrow">SIMULATED LIMELIGHT</p>
+                <h2>Vision solution</h2>
+              </div>
+              <span id="targetBadge" class="target-badge no-target">NO TARGET</span>
+            </div>
+            <dl class="vision-list">
+              <div><dt>tv</dt><dd id="tvValue">0</dd><span>valid target</span></div>
+              <div><dt>tx</dt><dd id="txValue">0.0°</dd><span>horizontal offset</span></div>
+              <div><dt>ty</dt><dd id="tyValue">0.0°</dd><span>vertical offset</span></div>
+              <div><dt>ta</dt><dd id="taValue">0.00%</dd><span>target area</span></div>
+              <div><dt>range</dt><dd id="rangeValue">12.45 m</dd><span>ground distance</span></div>
+            </dl>
+          </section>
+        </aside>
+      </div>
+
+      <section class="lower-grid">
+        <section class="panel controls-panel">
+          <div class="panel-heading compact">
+            <div>
+              <p class="eyebrow">DRIVER INPUT</p>
+              <h2>Arcade drive</h2>
+            </div>
+            <span class="key-hint">WASD / arrows</span>
+          </div>
+          <div class="control-body">
+            <div class="dpad" aria-label="Touch drive controls">
+              <button class="drive-button up" data-control="forward" aria-label="Drive forward">▲</button>
+              <button class="drive-button left" data-control="left" aria-label="Turn left">◀</button>
+              <button class="drive-button stop" data-control="stop" aria-label="Stop">STOP</button>
+              <button class="drive-button right" data-control="right" aria-label="Turn right">▶</button>
+              <button class="drive-button down" data-control="reverse" aria-label="Drive backward">▼</button>
+            </div>
+            <div class="input-monitor">
+              <label>Throttle <output id="throttleValue">0%</output></label>
+              <div class="bar"><i id="throttleBar"></i></div>
+              <label>Turn <output id="turnValue">0%</output></label>
+              <div class="bar bipolar"><i id="turnBar"></i></div>
+              <label class="speed-label" for="speedLimit">Speed limit <output id="speedLimitValue">75%</output></label>
+              <input id="speedLimit" type="range" min="25" max="100" value="75" />
+            </div>
+          </div>
+        </section>
+
+        <section class="panel coach-panel">
+          <div class="panel-heading compact">
+            <div>
+              <p class="eyebrow">COACH MODE</p>
+              <h2>What this proves</h2>
+            </div>
+          </div>
+          <ol class="checklist">
+            <li><span>1</span><div><strong>Real control timing</strong><p>The model advances on the same 20 ms rhythm used by FRC robot code.</p></div></li>
+            <li><span>2</span><div><strong>Hardware-free feedback</strong><p>Encoders, pose, battery sag, and vision update as the robot moves.</p></div></li>
+            <li><span>3</span><div><strong>Migration-ready names</strong><p>Limelight-style tv, tx, ty, and ta values map cleanly to future NetworkTables topics.</p></div></li>
+          </ol>
+          <div id="networkHelp" class="network-help">Checking phone access…</div>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      <span>Learning simulator · not a SystemCore hardware emulator</span>
+      <span>Physics model v0.1</span>
+    </footer>
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
