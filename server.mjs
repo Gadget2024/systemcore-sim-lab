@@ -3,6 +3,7 @@ import { networkInterfaces } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
+import { Nt4Bridge } from "./lib/nt4-bridge.mjs";
 
 // Resolve paths relative to this file so startup does not depend on the terminal folder.
 const projectDirectory = fileURLToPath(new URL(".", import.meta.url));
@@ -16,7 +17,8 @@ const contentTypesByExtension = new Map([
   [".js", "text/javascript; charset=utf-8"],
   [".mjs", "text/javascript; charset=utf-8"],
   [".json", "application/json; charset=utf-8"],
-  [".svg", "image/svg+xml"]
+  [".svg", "image/svg+xml"],
+  [".md", "text/plain; charset=utf-8"]
 ]);
 
 // Collect non-localhost IPv4 addresses for the phone-access hint.
@@ -45,8 +47,50 @@ function sendJson(response, statusCode, responseBody) {
   response.end(JSON.stringify(responseBody));
 }
 
+const labBridge = new Nt4Bridge({ port: Number(process.env.NT_PORT ?? 5810) });
+const loopbackAddresses = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
 const server = createServer(async (request, response) => {
-  const requestUrl = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+  let requestUrl;
+  try { requestUrl = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`); }
+  catch { return sendJson(response, 400, { error: "Invalid address" }); }
+
+  if (requestUrl.pathname.startsWith("/api/lab/")) {
+    // Learning controls only operate from a browser on this computer, with the same origin.
+    if (!loopbackAddresses.has(request.socket.remoteAddress)
+        || !["localhost", "127.0.0.1", "[::1]"].includes(requestUrl.hostname)
+        || (request.headers.origin && request.headers.origin !== requestUrl.origin)) {
+      return sendJson(response, 403, { error: "Open the learning lab on the server computer." });
+    }
+    if (requestUrl.pathname === "/api/lab/events" && request.method === "GET") {
+      response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
+      const send = (snapshot) => response.write(`data: ${JSON.stringify(snapshot)}\n\n`);
+      send(labBridge.snapshot());
+      labBridge.on("snapshot", send);
+      request.on("close", () => labBridge.off("snapshot", send));
+      return;
+    }
+    if (requestUrl.pathname === "/api/lab/status" && request.method === "GET") {
+      return sendJson(response, 200, labBridge.snapshot());
+    }
+    if (requestUrl.pathname === "/api/lab/controls" && request.method === "POST") {
+      if (!request.headers["content-type"]?.startsWith("application/json")) {
+        return sendJson(response, 415, { error: "Use JSON controls" });
+      }
+      try {
+        let body = "";
+        for await (const chunk of request) {
+          body += chunk;
+          if (Buffer.byteLength(body) > 2048) return sendJson(response, 413, { error: "Controls too large" });
+        }
+        labBridge.acceptControls(JSON.parse(body));
+        return sendJson(response, 200, { ok: true });
+      } catch (error) {
+        return sendJson(response, error.status ?? 400, { error: error.message });
+      }
+    }
+    return sendJson(response, 405, { error: "Unsupported lab request" });
+  }
 
   // Small API routes used by diagnostics and the browser's network hint.
   if (requestUrl.pathname === "/api/health") {
@@ -54,12 +98,20 @@ const server = createServer(async (request, response) => {
   }
 
   if (requestUrl.pathname === "/api/network") {
-    return sendJson(response, 200, { port: serverPort, addresses: getNetworkAddresses() });
+    return sendJson(response, 200, { port: server.address().port, addresses: getNetworkAddresses() });
   }
 
   // Visiting / serves index.html. Other URLs map to files in the project folder.
-  const requestedFile = requestUrl.pathname === "/" ? "index.html" : decodeURIComponent(requestUrl.pathname.slice(1));
-  const normalizedRelativePath = normalize(requestedFile).replace(/^(\.\.[/\\])+/, "");
+  let requestedFile;
+  try { requestedFile = requestUrl.pathname === "/" ? "index.html" : decodeURIComponent(requestUrl.pathname.slice(1)); }
+  catch { return sendJson(response, 400, { error: "Invalid path" }); }
+  const normalizedRelativePath = normalize(requestedFile).replace(/^(\.\.[/\\])+/, "").replaceAll("\\", "/");
+  // Only publish browser assets and the learning guide, never Git, dependencies, or build files.
+  const publicFiles = new Set(["index.html", "learn.html", "styles.css", "learning.css", "docs/learning-lab.md"]);
+  if (!publicFiles.has(normalizedRelativePath)
+      && !/^src\/[a-zA-Z0-9-]+\.(?:js|mjs)$/.test(normalizedRelativePath.replaceAll("\\", "/"))) {
+    return sendJson(response, 404, { error: "Not found" });
+  }
   const absoluteFilePath = join(projectDirectory, normalizedRelativePath);
 
   if (!absoluteFilePath.startsWith(projectDirectory)) {
@@ -86,8 +138,14 @@ const server = createServer(async (request, response) => {
 // Listen on all IPv4 interfaces so other devices can reach the simulator.
 // This learning server has no login; keep it on a trusted/private network.
 server.listen(serverPort, "0.0.0.0", () => {
-  console.log(`SystemCore Sim running at http://localhost:${serverPort}`);
+  const listeningPort = server.address().port;
+  console.log(`SystemCore Sim running at http://localhost:${listeningPort}`);
   for (const networkAddress of getNetworkAddresses()) {
-    console.log(`${networkAddress.kind === "tailscale" ? "Tailscale" : "Network"}: http://${networkAddress.address}:${serverPort}`);
+    console.log(`${networkAddress.kind === "tailscale" ? "Tailscale" : "Network"}: http://${networkAddress.address}:${listeningPort}`);
   }
 });
+
+// Cleanly disconnect the desktop bridge when the web server closes.
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => { labBridge.close(); server.closeAllConnections(); server.close(() => process.exit(0)); });
+}

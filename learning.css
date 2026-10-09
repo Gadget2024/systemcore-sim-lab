@@ -1,0 +1,68 @@
+a { color: #63deeb; text-underline-offset: 4px; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #ffb84a; outline-offset: 4px; }
+.back-link { font-size: 13px; }
+.learning-main { max-width: 1350px; }
+.learning-intro { display: grid; grid-template-columns: 1.6fr 1fr; gap: 36px; align-items: center; padding: 34px 0; }
+.learning-intro h2 { font-size: clamp(32px, 4.6vw, 58px); letter-spacing: -.04em; line-height: 1.08; margin: 12px 0; }
+.learning-intro p { max-width: 610px; line-height: 1.6; color: var(--muted); }
+.connection-card { border: 1px solid var(--line-bright); border-radius: 14px; padding: 24px; background: var(--surface); }
+.connection-card strong { font-size: 17px; }
+.connection-card p { font-size: 13px; }
+.connection-dot { display: inline-block; width: 10px; height: 10px; background: var(--amber); border-radius: 50%; margin-right: 8px; }
+.connection-dot.ready { background: var(--green); box-shadow: 0 0 18px #43e09450; }
+.version-label { font: 11px ui-monospace, monospace; color: var(--muted); }
+.setup-panel { padding: 22px 26px; margin-bottom: 20px; border-color: #64552e; }
+.setup-panel[hidden] { display: none; }
+.setup-panel h2 { margin-top: 0; font-size: 19px; }
+.setup-panel li { margin: 12px 0; line-height: 1.65; }
+.setup-panel p { color: var(--muted); font-size: 13px; }
+code { background: #172b3e; color: #b9f5fb; border-radius: 4px; padding: 2px 5px; overflow-wrap: anywhere; }
+.lesson-layout { display: grid; grid-template-columns: 275px 1fr; gap: 16px; margin-bottom: 22px; }
+.lesson-sidebar { padding: 20px; }
+.lesson-list { display: grid; gap: 8px; margin-top: 18px; }
+.lesson-tab { display: flex; align-items: center; gap: 12px; padding: 14px 12px; background: transparent; color: var(--text); border: 1px solid transparent; border-radius: 9px; text-align: left; cursor: pointer; }
+.lesson-tab[aria-current="step"] { background: #113746; border-color: #37d5ee80; }
+.lesson-tab span { color: var(--cyan); font: 12px ui-monospace, monospace; }
+.lesson-tab strong { font-size: 13px; }
+.progress-label { font-size: 12px; color: var(--muted); margin: 22px 0 8px; }
+.text-button { padding: 0; border: 0; background: none; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
+.lesson-content { padding: 25px 30px; }
+.lesson-content h2 { margin: 9px 0; font-size: 27px; }
+.lesson-content > p, .lesson-steps { line-height: 1.6; color: #bbcfdf; font-size: 14px; }
+.lesson-steps { padding-left: 20px; }
+.lesson-steps li { margin: 8px 0; padding-left: 3px; }
+.reflection { border-left: 3px solid var(--amber); padding: 8px 15px; background: #ffb84a08; }
+.reflection strong { color: var(--amber); font-size: 12px; }
+.reflection p { font-size: 13px; line-height: 1.6; margin: 6px 0; }
+.code-guide { margin-top: 16px; font-size: 13px; line-height: 1.6; }
+.code-guide summary { cursor: pointer; color: var(--cyan); }
+.code-guide p { color: var(--muted); }
+.lesson-complete { margin-top: 16px; }
+.lab-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 20px; gap: 20px; border-bottom: 1px solid var(--line); }
+.lab-toolbar h2 { font-size: 20px; margin: 6px 0 0; }
+.lab-actions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.lab-actions label { font-size: 11px; color: var(--muted); }
+.lab-actions select { display: block; margin-top: 5px; padding: 8px; border: 1px solid var(--line-bright); border-radius: 7px; color: var(--text); background: var(--surface); }
+#enableRobot { background: var(--cyan); color: #04121b; font-weight: 700; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+.control-notice { margin: 0; padding: 10px 20px; background: #13293a; color: #c0d8e9; font-size: 12px; min-height: 35px; }
+.lab-practice-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(210px, 1fr); }
+#labField { display: block; width: 100%; height: auto; aspect-ratio: 2; background: #081522; }
+.lab-legend { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; font-size: 11px; color: var(--muted); padding: 12px; }
+.lab-legend i { display: inline-block; height: 9px; width: 9px; margin-right: 5px; }
+.actual-key { background: var(--cyan); }.estimate-key { border: 2px solid #d6ebf9; }.target-key { background: var(--amber); }
+.field-note { font-size: 11px; color: var(--muted); text-align: center; margin: 0 12px 14px; }
+.lab-readouts { display: grid; grid-template-columns: 1fr 1fr; border-left: 1px solid var(--line); }
+.lab-readouts div { padding: 15px 12px; border-bottom: 1px solid var(--line); min-width: 0; }
+.lab-readouts span { display: block; color: var(--muted); font-size: 11px; }
+.lab-readouts strong { display: block; margin-top: 8px; font: 15px ui-monospace, monospace; overflow-wrap: anywhere; }
+.lab-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; padding: 25px; border-top: 1px solid var(--line); }
+.lab-controls fieldset { border: 0; min-width: 0; padding: 0; margin: 0; }
+.lab-controls legend { font-size: 13px; font-weight: 700; margin-bottom: 16px; }
+.lab-controls label { font-size: 12px; color: #c0d8e9; display: flex; justify-content: space-between; margin: 14px 0 8px; gap: 8px; }
+.lab-controls .toggle-label { justify-content: start; align-items: center; }
+.lab-controls input[type="checkbox"] { accent-color: var(--cyan); width: 17px; height: 17px; }
+.lab-controls p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.next-step { padding: 24px; margin-top: 22px; }.next-step h2 { font-size: 19px; margin-top: 0; }.next-step p { font-size: 13px; line-height: 1.7; color: var(--muted); }
+@media (max-width: 1000px) { .lab-toolbar { align-items: start; flex-direction: column; } .lab-practice-grid { grid-template-columns: 1fr; } .lab-readouts { grid-template-columns: repeat(4, 1fr); border-left: 0; } }
+@media (max-width: 720px) { .learning-intro { grid-template-columns: 1fr; gap: 12px; padding: 20px 0; } .lesson-layout { grid-template-columns: 1fr; } .lesson-list { grid-template-columns: 1fr 1fr; } .lesson-content { padding: 20px; } .lab-controls { grid-template-columns: 1fr; } .lab-readouts { grid-template-columns: 1fr 1fr; } .back-link { font-size: 11px; } .learning-intro h2 { font-size: 37px; } }

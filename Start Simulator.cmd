@@ -18,7 +18,15 @@ if not exist "%SIM_NODE_EXECUTABLE%" (
 )
 
 :run
+if not exist "node_modules\ws\package.json" goto packages
+if not exist "node_modules\@msgpack\msgpack\package.json" goto packages
 echo Starting SystemCore Sim...
 echo Keep this window open, then browse to http://localhost:4173
 "%SIM_NODE_EXECUTABLE%" server.mjs
 pause
+exit /b
+
+:packages
+echo Install the project packages first: open PowerShell in this folder and run npm.cmd ci.
+pause
+exit /b 1

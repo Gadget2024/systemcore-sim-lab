@@ -1,6 +1,11 @@
 # SystemCore Sim Lab
 
-A browser-based FRC learning simulator for Coach Greene. It demonstrates the control loop, differential-drive physics, pose estimation, battery sag, field boundaries, and Limelight-style target data before SystemCore hardware is available.
+An FRC learning simulator for Coach Greene, with two ways to practice before Systemcore hardware arrives:
+
+- **Quick practice field** at `/`: a browser-only robot model for trying Teleop, Auto, battery sag, and Limelight-style target data.
+- **WPILib learning lab** at `/learn.html`: run a real Java robot project on your computer, with four guided lessons, simulated encoders and camera, position estimation, and live NetworkTables telemetry.
+
+The learning lab teaches WPILib 2027 Alpha 7. It includes a commented Auto function students can change and test, with no robot hardware required.
 
 This is a learning simulator, not an emulator of the SystemCore operating system or its exact electronics.
 
@@ -14,6 +19,7 @@ These instructions take you from a Windows or macOS computer with no developer t
 - [Start the simulator](#start-the-simulator)
 - [Stop and start again](#stop-and-start-again)
 - [Troubleshooting](#troubleshooting)
+- [Start the WPILib learning lab](#start-the-wpilib-learning-lab)
 - [Learn to change the code](#learn-to-change-the-code)
 
 ### What you need
@@ -27,7 +33,7 @@ These instructions take you from a Windows or macOS computer with no developer t
 
 You need an internet connection for the downloads and may need an administrator password to install the tools. On a school-managed computer, ask your teacher or IT administrator to install them if you do not have permission.
 
-You do **not** need a GitHub account, an npm account, Codex, a code editor, Java, WPILib, or robot hardware to run this simulator. Tailscale is optional and is only used for the phone-access instructions later in this guide. The project declares Node.js 20 as its minimum, but new installations should use the supported LTS version recommended above.
+You do **not** need a GitHub account, an npm account, Codex, a code editor, Java, WPILib, or robot hardware for the **quick practice field**. The **WPILib learning lab** additionally needs **Java JDK 25**; the [learning guide](docs/learning-lab.md) walks through installing it, including Windows and macOS steps. Tailscale is optional and is only used for the phone-access instructions later in this guide. The project declares Node.js 20 as its minimum, but new installations should use the supported LTS version recommended above.
 
 A **terminal** is an application where you type commands. Copy only the lines inside each command box, press **Enter** (or **Return**) after each line, and wait for it to finish before entering the next one. You do not need to type the surrounding backticks or a prompt such as `$` or `PS>`.
 
@@ -94,7 +100,13 @@ ls
 
 You should see files including `README.md`, `package.json`, and `server.mjs`. Keep this terminal window open for the next step. This public repository does not require signing into GitHub or configuring a Git username and email just to download and run it.
 
-**There is no `npm install` step.** This project uses Node.js built-in features and has no third-party package dependencies. Installing Node.js and cloning the repository is enough; there is no build step either.
+Install the project packages once, in this folder:
+
+```sh
+npm ci
+```
+
+This downloads the pinned NetworkTables bridge dependencies. Wait for it to finish before starting the server. You do not need an npm account or a separate browser build step. If PowerShell blocks `npm.ps1`, use `npm.cmd ci`.
 
 ### Start the simulator
 
@@ -149,6 +161,7 @@ Stop the server, open a terminal in the project folder using the appropriate `cd
 
 ```sh
 git pull --ff-only
+npm ci
 npm start
 ```
 
@@ -163,12 +176,25 @@ If Git reports conflicting local changes or says it cannot fast-forward, keep yo
 | The Node.js version is below 20, or npm reports an unsupported engine | Install Node.js 24 LTS using the instructions above, reopen your terminal, and check `node --version` again. |
 | Git says the destination folder already exists and is not empty | If it is already your copy of this project, enter that folder and continue. Otherwise, preserve the existing folder and choose a different name: `git clone https://github.com/Gadget2024/systemcore-sim-lab.git systemcore-sim-lab-new`, then `cd systemcore-sim-lab-new`. Use that folder name in later commands too. |
 | npm cannot find `package.json`, or Node cannot find `server.mjs` | Your terminal is in the wrong folder. Use the `cd` command in **Stop and start again**, then check for those files with `dir` on Windows or `ls` on macOS. |
+| `Cannot find package` (for example `ws`) | Run `npm ci` in the project folder, then start again. This version adds dependencies for the WPILib learning lab. |
 | The browser cannot connect | Check that the server is still running and use `http://localhost:4173` on the same computer, including `http://` rather than `https://`. Look for an error in the terminal. |
 | `EADDRINUSE` or "address already in use" | Another program or simulator instance is using port 4173. If you already started this simulator, use its browser page or stop that instance with Ctrl + C before starting another. |
 | macOS says `Start Simulator.command` is not executable | In Terminal, enter the project folder and run `chmod +x "Start Simulator.command"` once, then try again. You can also start it with `node server.mjs` from that folder. |
 | Git cannot download the repository | Check your internet connection and open the repository link in your browser. On a managed school network, ask IT for help if GitHub downloads are blocked. |
 
-## Drive the simulator
+## Start the WPILib learning lab
+
+After completing the setup above, follow [Learn before the hardware arrives](docs/learning-lab.md) to install **Java JDK 25**. Then keep `npm start` running and open a **second terminal**, enter the project folder, and run:
+
+```sh
+npm run robot
+```
+
+The first run downloads WPILib and build tools. Once it says **Robot program startup complete**, open **<http://localhost:4173/learn.html>**. Start with **Take the wheel**, then try tuning Auto, covering the camera, and introducing encoder error. Click **Find this in the robot code** in each lesson to locate the corresponding function.
+
+The lab runs and accepts controls on the same computer. No official Driver Station or full WPILib installation is required for these desktop lessons. It starts disabled and requires a fresh Enable after losing its connection. The guide explains how to edit Java, run tests, and prepare for a future hardware project.
+
+## Drive the quick practice field
 
 - Select **Teleop**, then use WASD, the arrow keys, or the touch controls.
 - Select **Auto: target** to run the simple vision-guided routine.
@@ -182,6 +208,8 @@ If Git reports conflicting local changes or says it cannot fast-forward, keep yo
 3. Keep the simulator server running on the computer. It listens on all interfaces at port `4173`.
 4. On your phone, open the actual `http://100.x.x.x:4173` address printed in the computer's terminal and shown in Coach Mode; replace the `x` placeholders with the displayed numbers. `localhost` on a phone refers to the phone, not your computer.
 5. If Windows asks, allow Node.js on **Private networks** only.
+
+Phone/Tailscale access applies to the original quick practice field (`/`). The WPILib lab only accepts controls on the computer running the Java robot.
 
 The simulator has no login of its own. Tailscale provides the private network boundary, so do not expose port 4173 directly to the public internet.
 
@@ -199,11 +227,13 @@ Or run them directly with Node.js:
 node --test tests/*.test.mjs
 ```
 
-A successful run reports zero failed tests. You do not need to start the server to run these checks.
+A successful run reports zero failed tests. You do not need to start the server to run these checks. After installing JDK 25, use `npm run test:java` for the robot controller and camera tests; the [learning guide](docs/learning-lab.md) has more details.
 
 ## Learn to change the code
 
-Start with `autoCommand(robotState)` in [src/simulator.mjs](src/simulator.mjs). It has a numbered walkthrough and named settings so you can see what each value changes. Open the file in a code editor, save your changes, and refresh the simulator's browser tab. Refreshing restarts the browser simulation in Disabled mode; select **Auto: target** again to try your change.
+For the Java learning lab, start with [AutoController.java](wpilib-robot/src/main/java/lab/robot/AutoController.java) and the [step-by-step code exercise](docs/learning-lab.md#5-change-a-real-robot-function).
+
+For the **quick practice field**, start with `autoCommand(robotState)` in [src/simulator.mjs](src/simulator.mjs). It has a numbered walkthrough and named settings so you can see what each value changes. Open the file in a code editor, save your changes, and refresh the simulator's browser tab. Refreshing restarts the browser simulation in Disabled mode; select **Auto: target** again to try your change.
 
 ### Where each part lives
 
@@ -241,7 +271,7 @@ Change **one setting at a time** inside `autoCommand()`, save, refresh, and sele
 
 `minimumForwardPower` and `maximumForwardPower` are fractions of full power: keep `0 <= minimumForwardPower <= maximumForwardPower <= 1`. Steering changes each wheel's request, so the forward limit is not a separate cap on each wheel. `approachOffsetMeters` is the reference used in the slowdown formula, not the stop threshold; keep it below `stopDistanceMeters`. The inline comments explain the other settings.
 
-Run `npm test` after editing. If a test fails after an intentional behavior change, read the expected result and compare it with your goal before changing either the code or the test. There is no build or package-install step for these edits. Changes to browser files only require a refresh; changes to `server.mjs` require stopping and restarting `npm start`.
+Run `npm test` after editing. If a test fails after an intentional behavior change, read the expected result and compare it with your goal before changing either the code or the test. There is no browser build step for these edits; `npm ci` is only needed during setup or when package dependencies change. Changes to browser files only require a refresh; changes to `server.mjs` require stopping and restarting `npm start`.
 
 ### Read the names and units
 
@@ -250,14 +280,10 @@ Run `npm test` after editing. If a test fails after an intentional behavior chan
 - Motor power ranges from `-1` (full reverse) through `0` (no power) to `1` (full forward). Actual wheel speed changes gradually.
 - The short output names `tv`, `tx`, `ty`, and `ta` are retained for the Limelight-style dashboard. Their meaning is documented beside the return value of `limelightMeasurement()`.
 
-Auto currently knows the exact simulated position and target distance, even when the camera panel says **NO TARGET**. It does not avoid obstacles, and the speed-limit slider affects Teleop only. Its `complete` result cuts motor power near the target but does not switch the UI out of Auto. Use **Disabled**, **Escape**, or **E-stop** to interrupt Auto; the touch **STOP** button only clears manual inputs.
+The **quick practice field's** Auto knows the exact simulated position and target distance, even when the camera panel says **NO TARGET**. It does not avoid obstacles, and the speed-limit slider affects Teleop only. Its `complete` result cuts motor power near the target but does not switch the UI out of Auto. Use **Disabled**, **Escape**, or **E-stop** to interrupt Auto; the touch **STOP** button only clears manual inputs.
 
-## Path to a real WPILib project
+## Path to hardware
 
-The next integration step is to add a 2027 Alpha 6 Java robot project after the official WPILib installer is installed. Keep hardware calls behind subsystem interfaces, use WPILib simulation models in `simulationPeriodic()`, and publish the same telemetry names to NetworkTables. A small bridge can then replace this page's local simulated values with live NT4 values while keeping the phone dashboard.
+The [WPILib learning lab](docs/learning-lab.md) now provides the Java OpMode project, simulated sensors, odometry, and NT4 bridge. Its Auto uses delayed camera measurements and stops when the target is lost. The original quick practice field remains a separate, simpler JavaScript model.
 
-Official references:
-
-- [SystemcoreTesting](https://github.com/wpilibsuite/SystemcoreTesting)
-- [2027 WPILib simulation introduction](https://docs.wpilib.org/en/2027/docs/software/wpilib-tools/robot-simulation/introduction.html)
-- [NetworkTables overview](https://docs.wpilib.org/en/2027/docs/software/networktables/networktables-intro.html)
+This starter intentionally has no hardware deployment target. A mentor must set up the team's supported hardware project, motor controllers, sensors, camera input, Driver Station, and tuning. The lab practices transferable programming skills; it does not reproduce Systemcore's processor, ports, or operating system. See the [learning guide's model limits and hardware path](docs/learning-lab.md#what-transfers-to-systemcore).
