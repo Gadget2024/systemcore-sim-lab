@@ -23,12 +23,15 @@
       </div>
     </header>
 
+    <!-- HTML defines the controls and readout placeholders. src/app.js connects
+         elements by their id, data-mode, and data-control attributes. -->
     <main>
       <section class="driver-station" aria-label="Driver station controls">
         <div class="station-state">
           <span class="label">ROBOT STATE</span>
           <strong id="robotState">DISABLED</strong>
         </div>
+        <!-- data-mode values must match the mode names used in the JavaScript. -->
         <div class="mode-group" role="group" aria-label="Robot mode">
           <button class="mode-button active" data-mode="disabled">Disabled</button>
           <button class="mode-button" data-mode="teleop">Teleop</button>
@@ -54,6 +57,7 @@
             </div>
           </div>
           <div class="field-wrap">
+            <!-- app.js draws the field and robot here on each browser frame. -->
             <canvas id="field" aria-label="Top-down simulated FRC field"></canvas>
             <div id="disabledOverlay" class="field-overlay">
               <strong>Robot disabled</strong>
@@ -66,6 +70,7 @@
           </div>
         </section>
 
+        <!-- These values are refreshed from the simulated robot and camera. -->
         <aside class="telemetry-column">
           <section class="panel telemetry-panel">
             <div class="panel-heading compact">
@@ -112,6 +117,7 @@
             <span class="key-hint">WASD / arrows</span>
           </div>
           <div class="control-body">
+            <!-- Touch directions feed the same Teleop inputs as the keyboard. -->
             <div class="dpad" aria-label="Touch drive controls">
               <button class="drive-button up" data-control="forward" aria-label="Drive forward">▲</button>
               <button class="drive-button left" data-control="left" aria-label="Turn left">◀</button>
@@ -151,6 +157,7 @@
       <span>Learning simulator · not a SystemCore hardware emulator</span>
       <span>Physics model v0.1</span>
     </footer>
+    <!-- Module loading lets app.js import the physics functions from simulator.mjs. -->
     <script type="module" src="src/app.js"></script>
   </body>
 </html>

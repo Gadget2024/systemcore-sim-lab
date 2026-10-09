@@ -1,6 +1,7 @@
+/* Shared colors and spacing. var(--name) reads one of these reusable values. */
 :root {
   color-scheme: dark;
-  --bg: #050a12;
+  --page-background: #050a12;
   --surface: #0a1422;
   --surface-2: #0d1a2a;
   --surface-3: #122237;
@@ -15,15 +16,16 @@
   --green: #43e094;
   --radius: 14px;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: var(--bg);
+  background: var(--page-background);
   color: var(--text);
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 80% -20%, #102a43 0, transparent 38rem), var(--bg); }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 80% -20%, #102a43 0, transparent 38rem), var(--page-background); }
 button, input { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 
+/* Page header and connection indicator. */
 .topbar {
   min-height: 72px;
   display: flex;
@@ -46,6 +48,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .connection strong { color: var(--green); letter-spacing: .08em; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 14px var(--green); }
 
+/* Main layout and Disabled / Teleop / Auto buttons. */
 main { width: min(1480px, 100%); margin: 0 auto; padding: 18px clamp(12px, 2.6vw, 40px) 28px; }
 .driver-station { display: flex; align-items: stretch; gap: 14px; margin-bottom: 14px; min-height: 62px; border: 1px solid var(--line); background: linear-gradient(90deg, #0d1928, #09131f); border-radius: var(--radius); overflow: hidden; }
 .station-state { min-width: 160px; padding: 12px 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; }
@@ -60,6 +63,7 @@ main { width: min(1480px, 100%); margin: 0 auto; padding: 18px clamp(12px, 2.6vw
 .button.danger { color: #ffdadd; border-color: #7c3039; background: #271218; }
 .button.danger.latched { color: white; background: var(--red); border-color: var(--red); }
 
+/* Practice field, drawing area, and disabled overlay. */
 .workspace { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(270px, .63fr); gap: 14px; }
 .panel { border: 1px solid var(--line); background: linear-gradient(145deg, rgba(13, 26, 42, .94), rgba(8, 17, 29, .96)); border-radius: var(--radius); overflow: hidden; box-shadow: 0 14px 40px rgba(0,0,0,.18); }
 .panel-heading { min-height: 70px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
@@ -79,6 +83,7 @@ main { width: min(1480px, 100%); margin: 0 auto; padding: 18px clamp(12px, 2.6vw
 .field-overlay span { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .field-footer { min-height: 40px; padding: 10px 16px; display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font: 11px ui-monospace, monospace; border-top: 1px solid var(--line); }
 
+/* Live robot and simulated camera readouts. */
 .telemetry-column { display: grid; gap: 14px; }
 .live-badge, .target-badge { padding: 5px 8px; border-radius: 5px; font: 700 9px ui-monospace, monospace; letter-spacing: .08em; }
 .live-badge { color: var(--green); background: rgba(67,224,148,.09); border: 1px solid rgba(67,224,148,.35); }
@@ -99,6 +104,7 @@ main { width: min(1480px, 100%); margin: 0 auto; padding: 18px clamp(12px, 2.6vw
 .vision-list dd { margin: 0; font: 700 14px ui-monospace, monospace; text-align: right; }
 .vision-list span { color: var(--muted); font-size: 10px; text-align: right; }
 
+/* Touch controls, input bars, and coaching notes. */
 .lower-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr); gap: 14px; margin-top: 14px; }
 .key-hint { color: var(--muted); font: 10px ui-monospace, monospace; }
 .control-body { display: grid; grid-template-columns: 230px 1fr; gap: 24px; align-items: center; padding: 18px; }
@@ -127,6 +133,7 @@ input[type="range"] { width: 100%; accent-color: var(--cyan); }
 .network-help { margin: 8px 16px 16px; padding: 10px 12px; color: var(--muted); background: rgba(55,213,238,.05); border: 1px solid rgba(55,213,238,.16); border-radius: 8px; font: 10px/1.45 ui-monospace, monospace; overflow-wrap: anywhere; }
 footer { width: min(1480px, 100%); margin: 0 auto; padding: 0 clamp(12px, 2.6vw, 40px) 24px; display: flex; justify-content: space-between; gap: 12px; color: #5f7488; font: 9px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .08em; }
 
+/* Responsive rules rearrange the same controls to fit smaller screens. */
 @media (max-width: 920px) {
   .workspace, .lower-grid { grid-template-columns: 1fr; }
   .telemetry-column { grid-template-columns: 1fr 1fr; }
@@ -170,6 +177,7 @@ footer { width: min(1480px, 100%); margin: 0 auto; padding: 0 clamp(12px, 2.6vw,
   .connection { display: none; }
 }
 
+/* Respect the user's system preference for reduced animation. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }

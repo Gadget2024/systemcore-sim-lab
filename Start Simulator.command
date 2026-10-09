@@ -1,6 +1,8 @@
 #!/bin/bash
 
+# Run from the folder containing this launcher, even when opened from Finder.
 cd -- "$(dirname -- "$0")" || exit 1
+# Finder may not include these common Node installation locations in PATH.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 if ! command -v node >/dev/null 2>&1; then
@@ -13,5 +15,6 @@ fi
 
 echo "Starting Coach Greene's SystemCore Sim..."
 echo "Keep this window open while using the simulator."
+# Open the page after giving Node a moment to start; keep this window running.
 (sleep 1 && open "http://localhost:4173") &
 exec node server.mjs
