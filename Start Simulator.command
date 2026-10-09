@@ -13,6 +13,12 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 
+if [ ! -d node_modules/ws ] || [ ! -d node_modules/@msgpack/msgpack ]; then
+  echo "Install the project packages first: open Terminal in this folder and run npm ci."
+  read -r -p "Press Return to close this window..."
+  exit 1
+fi
+
 echo "Starting Coach Greene's SystemCore Sim..."
 echo "Keep this window open while using the simulator."
 # Open the page after giving Node a moment to start; keep this window running.

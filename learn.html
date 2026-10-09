@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Systemcore Learning Lab</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="learning.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">SC</span><div><p class="eyebrow">LEARN • TRY • UNDERSTAND</p><h1>Systemcore Learning Lab</h1></div></div>
+    <a class="back-link" href="/">Quick practice field ↗</a>
+  </header>
+  <main class="learning-main">
+    <section class="learning-intro">
+      <div><p class="eyebrow">YOUR FIRST ROBOT PROGRAM</p><h2>Start learning.<br>Hardware can wait.</h2><p>Run real WPILib code on your computer. Drive, tune, and discover what happens when a sensor gets it wrong.</p></div>
+      <div class="connection-card" role="status" aria-live="polite"><span id="connectionDot" class="connection-dot"></span><strong id="connectionLabel">Looking for your robot…</strong><p id="connectionDetail">The practice robot starts disabled.</p><span class="version-label">WPILib 2027 Alpha 7 · desktop simulation</span></div>
+    </section>
+
+    <section id="setupPanel" class="panel setup-panel">
+      <h2>Connect your practice robot</h2>
+      <ol>
+        <li><strong>Install Java 25 JDK.</strong> Use <a href="https://adoptium.net/temurin/releases/?version=25" target="_blank" rel="noreferrer">Temurin 25</a> for your computer. Close and reopen your terminal after installation.</li>
+        <li><strong>Open a second terminal in this project folder.</strong> Keep the web server running in the first one. Run <code>npm run robot</code>. The first run downloads WPILib and can take several minutes.</li>
+        <li><strong>Wait for “Robot program startup complete”.</strong> This page connects automatically. You can then choose a lesson and enable the robot.</li>
+      </ol>
+      <p>No robot, controller, team number, or separate Gradle install is needed. <a href="/docs/learning-lab.md">Full setup and troubleshooting</a></p>
+    </section>
+
+    <div class="lesson-layout">
+      <aside class="panel lesson-sidebar" aria-label="Lessons">
+        <p class="eyebrow">FOUR SMALL EXPERIMENTS</p>
+        <div id="lessonList" class="lesson-list"></div>
+        <p class="progress-label" id="lessonProgress">0 of 4 lessons checked off</p>
+        <button id="clearProgress" class="text-button" type="button">Clear checkmarks</button>
+      </aside>
+      <section class="panel lesson-content" aria-labelledby="lessonTitle">
+        <p class="eyebrow" id="lessonNumber">LESSON 01</p><h2 id="lessonTitle">Take the wheel</h2>
+        <p id="lessonDescription"></p>
+        <ol id="lessonSteps" class="lesson-steps"></ol>
+        <div class="reflection"><strong>Think about it</strong><p id="lessonQuestion"></p></div>
+        <details class="code-guide"><summary>Find this in the robot code</summary><p id="lessonCode"></p></details>
+        <button id="completeLesson" class="button lesson-complete" type="button">I tried this lesson ✓</button>
+      </section>
+    </div>
+
+    <section class="panel practice-panel" aria-label="Practice robot">
+      <div class="lab-toolbar">
+        <div><p class="eyebrow">LIVE FROM YOUR JAVA ROBOT</p><h2 id="robotStatus" aria-live="polite">Waiting for the robot</h2></div>
+        <div class="lab-actions"><label>Routine <select id="labMode"><option value="teleop">Teleop — I drive</option><option value="auto">Auto — approach target</option></select></label><button id="enableRobot" class="button" type="button" disabled>Enable robot</button><button id="disableRobot" class="button danger" type="button">Disable / Esc</button><button id="resetRobot" class="button secondary" type="button" disabled>Reset field</button></div>
+      </div>
+      <p id="controlNotice" class="control-notice" role="status" aria-live="polite">Connect your robot to begin. It always starts disabled.</p>
+      <div class="lab-practice-grid">
+        <div class="lab-field-column"><canvas id="labField" width="1100" height="550" aria-label="Practice field showing actual and estimated robot positions"></canvas>
+          <div class="lab-legend"><span><i class="actual-key"></i> Simulated robot</span><span><i class="estimate-key"></i> Sensor estimate</span><span><i class="target-key"></i> Target</span></div>
+          <p class="field-note">Open practice field. This lesson does not model barricades or field-wall collisions.</p>
+        </div>
+        <div class="lab-readouts">
+          <div><span>Left encoder</span><strong id="leftEncoder">—</strong></div><div><span>Right encoder</span><strong id="rightEncoder">—</strong></div><div><span>Position error</span><strong id="poseError">—</strong></div><div><span>Battery</span><strong id="labBattery">—</strong></div><div><span>Camera</span><strong id="cameraState">—</strong></div><div><span>Camera range</span><strong id="cameraRange">—</strong></div><div><span>Motor power · L / R</span><strong id="motorPower">—</strong></div><div><span>Code running</span><strong id="lifecycle">—</strong></div>
+        </div>
+      </div>
+      <div class="lab-controls">
+        <fieldset><legend>Drive with WASD, arrows, or these buttons</legend><div class="dpad"><button class="drive-button up" data-lab-direction="forward" aria-label="Drive forward">▲</button><button class="drive-button left" data-lab-direction="left" aria-label="Turn left">◀</button><button class="drive-button stop" id="stopRobot" aria-label="Disable robot">STOP</button><button class="drive-button right" data-lab-direction="right" aria-label="Turn right">▶</button><button class="drive-button down" data-lab-direction="reverse" aria-label="Drive backward">▼</button></div><p>Hold a direction to drive in Teleop. Switching tabs disables the robot.</p></fieldset>
+        <fieldset><legend>Try one change at a time</legend><label for="labPower">Maximum forward power <output id="labPowerValue">45%</output></label><input id="labPower" type="range" min="10" max="80" value="45" /><label for="labStopDistance">Auto stopping distance <output id="labStopValue">1.5 m</output></label><input id="labStopDistance" type="range" min="0.5" max="3" step="0.1" value="1.5" /><p>Steering can make one wheel's power higher than the forward setting.</p></fieldset>
+        <fieldset><legend>Explore sensor problems</legend><label class="toggle-label"><input id="cameraCovered" type="checkbox" /> Cover the camera</label><p>Readings arrive about 120 ms late. Auto stops when it receives a lost-target reading.</p><label class="toggle-label"><input id="encoderSlip" type="checkbox" /> Under-read wheel distance</label><p>Encoders report 75% of travel. Watch the outlined position fall behind.</p></fieldset>
+      </div>
+    </section>
+    <section class="next-step panel"><h2>From practice to a real robot</h2><p>You are using WPILib's Auto/Teleop lifecycle, encoder readings, odometry, and NetworkTables. This project intentionally has no hardware deployment target. A mentor will help choose motor controllers, map sensors, and implement <code>DriveIO</code> for your robot.</p><p><a href="https://docs.wpilib.org/en/latest/docs/software/basic-programming/opmodes.html" target="_blank" rel="noreferrer">Explore the OpMode framework ↗</a> · <a href="/docs/learning-lab.md">Read the learning guide ↗</a></p></section>
+  </main>
+  <footer><span>A learning project for future Systemcore teams</span><span>Simulation only · not a hardware emulator</span></footer>
+  <script type="module" src="src/learning.js"></script>
+</body>
+</html>
