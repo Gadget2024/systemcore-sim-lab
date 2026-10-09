@@ -1,9 +1,47 @@
 export const FIELD = Object.freeze({ width: 16.54, height: 8.21 });
 export const ROBOT = Object.freeze({ width: 0.78, length: 0.86, trackWidth: 0.62, maxSpeed: 4.5 });
 export const TARGET = Object.freeze({ x: 14.65, y: 4.105, height: 1.45 });
+// Axis-aligned blocks, x/y at the lower-left corner. The centre lane stays open for the auto routine.
+export const BARRICADES = Object.freeze([
+  { x: 4.8, y: 5.3, width: 0.3, height: 1.4 },
+  { x: 4.8, y: 1.51, width: 0.3, height: 1.4 },
+  { x: 7.5, y: 6.0, width: 1.5, height: 0.3 },
+  { x: 7.5, y: 1.91, width: 1.5, height: 0.3 },
+  { x: 11.2, y: 5.3, width: 0.3, height: 1.4 },
+  { x: 11.2, y: 1.51, width: 0.3, height: 1.4 }
+].map(Object.freeze));
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const wrap = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle));
+
+function pushOutOfBarricades(x, y, radius) {
+  let collided = false;
+  for (const block of BARRICADES) {
+    const nearestX = clamp(x, block.x, block.x + block.width);
+    const nearestY = clamp(y, block.y, block.y + block.height);
+    const dx = x - nearestX;
+    const dy = y - nearestY;
+    const gap = Math.hypot(dx, dy);
+    if (gap >= radius) continue;
+    collided = true;
+    if (gap > 0) {
+      x = nearestX + dx / gap * radius;
+      y = nearestY + dy / gap * radius;
+    } else {
+      // Centre is inside the block: leave through the closest face.
+      const exits = [
+        { depth: x - block.x, x: block.x - radius, y },
+        { depth: block.x + block.width - x, x: block.x + block.width + radius, y },
+        { depth: y - block.y, x, y: block.y - radius },
+        { depth: block.y + block.height - y, x, y: block.y + block.height + radius }
+      ];
+      const exit = exits.reduce((best, option) => option.depth < best.depth ? option : best);
+      x = exit.x;
+      y = exit.y;
+    }
+  }
+  return { x, y, collided };
+}
 
 export function initialState() {
   return {
@@ -43,9 +81,10 @@ export function stepRobot(state, command, dt) {
   const radius = Math.hypot(ROBOT.length, ROBOT.width) / 2;
   const nextX = state.x + Math.cos(headingMidpoint) * linearVelocity * safeDt;
   const nextY = state.y + Math.sin(headingMidpoint) * linearVelocity * safeDt;
-  const x = clamp(nextX, radius, FIELD.width - radius);
-  const y = clamp(nextY, radius, FIELD.height - radius);
-  const collided = x !== nextX || y !== nextY;
+  const cleared = pushOutOfBarricades(nextX, nextY, radius);
+  const x = clamp(cleared.x, radius, FIELD.width - radius);
+  const y = clamp(cleared.y, radius, FIELD.height - radius);
+  const collided = cleared.collided || x !== cleared.x || y !== cleared.y;
   const load = (Math.abs(leftCommand) + Math.abs(rightCommand)) / 2;
 
   return {

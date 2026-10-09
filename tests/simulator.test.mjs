@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FIELD, arcadeDrive, autoCommand, initialState, limelightMeasurement, stepRobot } from "../src/simulator.mjs";
+import { BARRICADES, FIELD, arcadeDrive, autoCommand, initialState, limelightMeasurement, stepRobot } from "../src/simulator.mjs";
 
 function run(state, command, seconds) {
   let next = state;
@@ -54,4 +54,19 @@ test("field boundaries contain the robot", () => {
   const end = run(start, { left: 1, right: 1 }, 2);
   assert.ok(end.x < FIELD.width);
   assert.ok(end.collisions > 0);
+});
+
+test("barricades stop the robot", () => {
+  const block = BARRICADES[0];
+  const start = { ...initialState(), y: block.y + block.height / 2, enabled: true, mode: "teleop" };
+  const end = run(start, { left: 1, right: 1 }, 3);
+  assert.ok(end.x < block.x);
+  assert.ok(end.collisions > 0);
+});
+
+test("auto routine reaches the target without touching a barricade", () => {
+  let state = { ...initialState(), enabled: true, mode: "auto" };
+  for (let step = 0; step < 1500 && !autoCommand(state).complete; step += 1) state = stepRobot(state, autoCommand(state), 0.02);
+  assert.equal(autoCommand(state).complete, true);
+  assert.equal(state.collisions, 0);
 });

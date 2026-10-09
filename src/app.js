@@ -1,4 +1,4 @@
-import { FIELD, ROBOT, TARGET, arcadeDrive, autoCommand, initialState, limelightMeasurement, stepRobot } from "./simulator.mjs";
+import { BARRICADES, FIELD, ROBOT, TARGET, arcadeDrive, autoCommand, initialState, limelightMeasurement, stepRobot } from "./simulator.mjs";
 
 const $ = (selector) => document.querySelector(selector);
 const canvas = $("#field");
@@ -150,6 +150,15 @@ function drawField() {
   context.strokeRect(1, 1, w - 2, h - 2);
   context.beginPath(); context.moveTo(w / 2, 0); context.lineTo(w / 2, h); context.stroke();
 
+  context.fillStyle = "#e5604d";
+  context.strokeStyle = "rgba(255, 214, 205, .7)";
+  for (const block of BARRICADES) {
+    const bx = block.x * sx;
+    const by = h - (block.y + block.height) * sy;
+    context.fillRect(bx, by, block.width * sx, block.height * sy);
+    context.strokeRect(bx, by, block.width * sx, block.height * sy);
+  }
+
   const tx = TARGET.x * sx;
   const ty = h - TARGET.y * sy;
   context.fillStyle = "#ffb84a";
@@ -197,7 +206,7 @@ function updateUI() {
   $("#headingValue").textContent = degrees.toFixed(1);
   $("#batteryValue").textContent = state.battery.toFixed(1);
   $("#poseReadout").textContent = `X ${state.x.toFixed(2)} m · Y ${state.y.toFixed(2)} m · ${degrees.toFixed(0)}°`;
-  $("#collisionReadout").textContent = `Boundary contacts ${state.collisions}`;
+  $("#collisionReadout").textContent = `Contacts ${state.collisions}`;
   $("#tvValue").textContent = vision.tv ? "1" : "0";
   $("#txValue").textContent = `${vision.tx.toFixed(1)}°`;
   $("#tyValue").textContent = `${vision.ty.toFixed(1)}°`;
