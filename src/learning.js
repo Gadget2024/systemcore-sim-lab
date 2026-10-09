@@ -10,11 +10,14 @@ try { completed = new Set(JSON.parse(localStorage.getItem("systemcore-lessons-v1
 catch { completed = new Set(); }
 let selectedLesson = 0;
 let connected = false;
+let controlsReady = false;
 let desiredEnabled = false;
 let resetCounter = 0;
 let latestTelemetry = null;
 let sending = false;
-const clientId = crypto.randomUUID();
+const isLocalBrowser = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+// Remote visitors can read lessons, but controls belong on the robot's computer.
+const clientId = isLocalBrowser ? crypto.randomUUID() : "remote-preview-only";
 const keyboardDirections = new Set();
 const touchDirections = new Set();
 const keys = new Map([["w", "forward"], ["arrowup", "forward"], ["s", "reverse"], ["arrowdown", "reverse"], ["a", "left"], ["arrowleft", "left"], ["d", "right"], ["arrowright", "right"]]);
@@ -47,7 +50,7 @@ find("#completeLesson").addEventListener("click", () => { completed.add(selected
 find("#clearProgress").addEventListener("click", () => { completed.clear(); rememberProgress(); showLesson(selectedLesson); });
 
 function updateButtons() {
-  find("#enableRobot").disabled = !connected || desiredEnabled;
+  find("#enableRobot").disabled = !connected || !controlsReady || desiredEnabled;
   find("#resetRobot").disabled = !connected || desiredEnabled || latestTelemetry?.enabled;
   find("#labMode").disabled = desiredEnabled;
 }
@@ -59,7 +62,7 @@ function disable(message = "Disabled. You can reset or choose another routine.")
   updateButtons();
   void sendControls();
 }
-function body() {
+function readDriverControls() {
   const held = new Set([...keyboardDirections, ...touchDirections]);
   return { clientId, enabled: desiredEnabled, mode: find("#labMode").value,
     throttle: Number(held.has("forward")) - Number(held.has("reverse")),
@@ -68,19 +71,25 @@ function body() {
     cameraCovered: find("#cameraCovered").checked, encoderSlip: find("#encoderSlip").checked, resetCounter };
 }
 async function sendControls() {
-  if (sending || document.hidden) return;
+  if (sending || document.hidden || !isLocalBrowser) return;
   sending = true;
   try {
-    const response = await fetch("/api/lab/controls", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body()), signal: AbortSignal.timeout(1200) });
+    const controls = readDriverControls();
+    const response = await fetch("/api/lab/controls", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(controls), signal: AbortSignal.timeout(1200) });
     if (!response.ok) {
+      controlsReady = false;
       desiredEnabled = false;
       const error = await response.json();
       find("#controlNotice").textContent = error.error ?? "Controls paused. Disable and try again.";
+    } else if (!controls.enabled && connected) {
+      // After refresh/reconnect, wait for a disabled handshake before offering Enable.
+      if (!controlsReady) find("#controlNotice").textContent = "Connected. Choose a routine, then enable when ready.";
+      controlsReady = true;
     }
-  } catch { desiredEnabled = false; find("#controlNotice").textContent = "Connection interrupted — controls disabled."; }
+  } catch { controlsReady = false; desiredEnabled = false; find("#controlNotice").textContent = "Connection interrupted — controls disabled."; }
   finally { sending = false; updateButtons(); }
 }
-find("#enableRobot").addEventListener("click", () => { if (!connected) return; desiredEnabled = true; find("#controlNotice").textContent = "Robot enabled. Press Escape or Disable to stop."; updateButtons(); void sendControls(); });
+find("#enableRobot").addEventListener("click", () => { if (!connected || !controlsReady) return; desiredEnabled = true; find("#controlNotice").textContent = "Robot enabled. Press Escape or Disable to stop."; updateButtons(); void sendControls(); });
 for (const id of ["#disableRobot", "#stopRobot"]) find(id).addEventListener("click", () => disable());
 find("#resetRobot").addEventListener("click", () => { if (!desiredEnabled && !latestTelemetry?.enabled) { resetCounter++; void sendControls(); } });
 find("#labMode").addEventListener("change", () => disable());
@@ -98,7 +107,10 @@ window.addEventListener("keydown", event => {
 window.addEventListener("keyup", event => { keyboardDirections.delete(keys.get(event.key.toLowerCase())); });
 window.addEventListener("blur", () => disable("Paused because this window lost focus. Enable when ready."));
 document.addEventListener("visibilitychange", () => { if (document.hidden) disable("Paused while this tab was away. Enable when ready."); });
-window.addEventListener("pagehide", () => { desiredEnabled = false; navigator.sendBeacon("/api/lab/controls", new Blob([JSON.stringify(body())], { type: "application/json" })); });
+window.addEventListener("pagehide", () => {
+  desiredEnabled = false;
+  if (isLocalBrowser) navigator.sendBeacon("/api/lab/controls", new Blob([JSON.stringify(readDriverControls())], { type: "application/json" }));
+});
 for (const button of document.querySelectorAll("[data-lab-direction]")) {
   const direction = button.dataset.labDirection;
   button.addEventListener("pointerdown", event => { event.preventDefault(); touchDirections.add(direction); button.classList.add("pressed"); button.setPointerCapture(event.pointerId); });
@@ -114,6 +126,7 @@ function showTelemetry(snapshot) {
   find("#connectionDetail").textContent = connected ? "Measurements are coming from your running WPILib project." : snapshot.message;
   find("#setupPanel").hidden = connected;
   if (!connected) {
+    controlsReady = false;
     if (wasConnected || desiredEnabled) disable("Robot connection lost. Reconnect, then enable again.");
     find("#robotStatus").textContent = "Waiting for the robot";
     for (const id of ["leftEncoder", "rightEncoder", "poseError", "labBattery", "cameraState", "cameraRange", "motorPower", "lifecycle"]) find(`#${id}`).textContent = "—";
@@ -131,9 +144,14 @@ function showTelemetry(snapshot) {
   }
   updateButtons(); drawField();
 }
-const events = new EventSource("/api/lab/events");
-events.onmessage = event => showTelemetry(JSON.parse(event.data));
-events.onerror = () => showTelemetry({ connected: false, telemetry: null, message: "Check that npm start is still running." });
+if (isLocalBrowser) {
+  const events = new EventSource("/api/lab/events");
+  events.onmessage = event => showTelemetry(JSON.parse(event.data));
+  events.onerror = () => showTelemetry({ connected: false, telemetry: null, message: "Check that npm start is still running." });
+} else {
+  showTelemetry({ connected: false, telemetry: null, message: `Open http://localhost:${location.port || 4173}/learn.html on the computer running the robot to drive.` });
+  find("#controlNotice").textContent = "You can read the lessons here. Use the server computer for Java robot controls.";
+}
 
 function drawField() {
   const canvas = find("#labField"); const context = canvas.getContext("2d");
