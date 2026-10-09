@@ -1,57 +1,65 @@
 import { BARRICADES, FIELD, ROBOT, TARGET, arcadeDrive, autoCommand, initialState, limelightMeasurement, stepRobot } from "./simulator.mjs";
 
-const $ = (selector) => document.querySelector(selector);
-const canvas = $("#field");
-const context = canvas.getContext("2d");
-let state = initialState();
-let lastTime = performance.now();
-let accumulator = 0;
-const fixedStep = 0.02;
-const keys = new Set();
-const touches = new Set();
-let speedLimit = Number(localStorage.getItem("sim-speed-limit") ?? 75) / 100;
+// Find a page element by its CSS selector, for example "#field" for id="field".
+const findElement = (selector) => document.querySelector(selector);
+const fieldCanvas = findElement("#field");
+const drawingContext = fieldCanvas.getContext("2d");
+// robotState is the current snapshot. Each physics step replaces it with a new one.
+let robotState = initialState();
+let previousFrameTimeMs = performance.now();
+let pendingSimulationSeconds = 0;
+// 0.02 seconds = 20 milliseconds = 50 robot updates per simulated second.
+const physicsStepSeconds = 0.02;
+const pressedKeyboardControls = new Set();
+const pressedTouchControls = new Set();
+// This saved slider value affects Teleop only; Auto has its own power settings.
+let driverSpeedLimitFraction = Number(localStorage.getItem("sim-speed-limit") ?? 75) / 100;
 
-$("#speedLimit").value = String(Math.round(speedLimit * 100));
-$("#speedLimitValue").textContent = `${Math.round(speedLimit * 100)}%`;
+findElement("#speedLimit").value = String(Math.round(driverSpeedLimitFraction * 100));
+findElement("#speedLimitValue").textContent = `${Math.round(driverSpeedLimitFraction * 100)}%`;
 
+// Mode selection enables outputs unless E-stop is latched.
 function setMode(mode) {
-  if (state.emergencyStopped && mode !== "disabled") return;
-  state = { ...state, mode, enabled: mode !== "disabled" };
+  if (robotState.emergencyStopped && mode !== "disabled") return;
+  robotState = { ...robotState, mode, enabled: mode !== "disabled" };
   document.querySelectorAll(".mode-button").forEach((button) => button.classList.toggle("active", button.dataset.mode === mode));
-  $("#robotState").textContent = state.emergencyStopped ? "E-STOPPED" : mode === "disabled" ? "DISABLED" : `${mode.toUpperCase()} ENABLED`;
-  $("#robotState").classList.toggle("enabled", state.enabled && !state.emergencyStopped);
-  $("#disabledOverlay").classList.toggle("hidden", state.enabled && !state.emergencyStopped);
+  findElement("#robotState").textContent = robotState.emergencyStopped ? "E-STOPPED" : mode === "disabled" ? "DISABLED" : `${mode.toUpperCase()} ENABLED`;
+  findElement("#robotState").classList.toggle("enabled", robotState.enabled && !robotState.emergencyStopped);
+  findElement("#disabledOverlay").classList.toggle("hidden", robotState.enabled && !robotState.emergencyStopped);
 }
 
 document.querySelectorAll(".mode-button").forEach((button) => button.addEventListener("click", () => setMode(button.dataset.mode)));
 
-$("#resetButton").addEventListener("click", () => {
-  const mode = state.mode;
-  const enabled = state.enabled;
-  state = { ...initialState(), mode, enabled };
+// Reset the pose and motion while keeping the currently selected mode.
+findElement("#resetButton").addEventListener("click", () => {
+  const mode = robotState.mode;
+  const enabled = robotState.enabled;
+  robotState = { ...initialState(), mode, enabled };
 });
 
-$("#estopButton").addEventListener("click", () => {
-  state = { ...state, emergencyStopped: true, enabled: false, mode: "disabled" };
-  $("#estopButton").classList.add("latched");
-  $("#estopButton").textContent = "E-stop latched";
+// A single click latches E-stop; a double-click clears it and leaves the robot disabled.
+findElement("#estopButton").addEventListener("click", () => {
+  robotState = { ...robotState, emergencyStopped: true, enabled: false, mode: "disabled" };
+  findElement("#estopButton").classList.add("latched");
+  findElement("#estopButton").textContent = "E-stop latched";
   setMode("disabled");
 });
 
-$("#estopButton").addEventListener("dblclick", () => {
-  state = { ...state, emergencyStopped: false };
-  $("#estopButton").classList.remove("latched");
-  $("#estopButton").textContent = "E-stop";
+findElement("#estopButton").addEventListener("dblclick", () => {
+  robotState = { ...robotState, emergencyStopped: false };
+  findElement("#estopButton").classList.remove("latched");
+  findElement("#estopButton").textContent = "E-stop";
   setMode("disabled");
 });
 
-$("#speedLimit").addEventListener("input", (event) => {
-  speedLimit = Number(event.target.value) / 100;
+findElement("#speedLimit").addEventListener("input", (event) => {
+  driverSpeedLimitFraction = Number(event.target.value) / 100;
   localStorage.setItem("sim-speed-limit", String(event.target.value));
-  $("#speedLimitValue").textContent = `${event.target.value}%`;
+  findElement("#speedLimitValue").textContent = `${event.target.value}%`;
 });
 
-const keyMap = new Map([
+// Keyboard and touch input both become the same direction names.
+const keyboardControlNames = new Map([
   ["w", "forward"], ["arrowup", "forward"],
   ["s", "reverse"], ["arrowdown", "reverse"],
   ["a", "left"], ["arrowleft", "left"],
@@ -59,204 +67,240 @@ const keyMap = new Map([
 ]);
 
 window.addEventListener("keydown", (event) => {
-  const control = keyMap.get(event.key.toLowerCase());
+  const control = keyboardControlNames.get(event.key.toLowerCase());
   if (control) {
     event.preventDefault();
-    keys.add(control);
+    pressedKeyboardControls.add(control);
   }
   if (event.key === "Escape") setMode("disabled");
 });
 
 window.addEventListener("keyup", (event) => {
-  const control = keyMap.get(event.key.toLowerCase());
-  if (control) keys.delete(control);
+  const control = keyboardControlNames.get(event.key.toLowerCase());
+  if (control) pressedKeyboardControls.delete(control);
 });
 
-window.addEventListener("blur", () => { keys.clear(); touches.clear(); });
+// Release remembered inputs when the browser loses focus, so Teleop cannot stick.
+window.addEventListener("blur", () => {
+  pressedKeyboardControls.clear();
+  pressedTouchControls.clear();
+});
 
 document.querySelectorAll(".drive-button").forEach((button) => {
   const control = button.dataset.control;
-  const press = (event) => {
+  const handlePress = (event) => {
     event.preventDefault();
+    // This STOP button clears manual inputs only; use Disabled/Escape to stop Auto.
     if (control === "stop") {
-      keys.clear();
-      touches.clear();
+      pressedKeyboardControls.clear();
+      pressedTouchControls.clear();
       return;
     }
-    touches.add(control);
+    pressedTouchControls.add(control);
     button.classList.add("pressed");
+    // Keep receiving the release event even if the finger moves off the button.
     button.setPointerCapture?.(event.pointerId);
   };
-  const release = () => {
-    touches.delete(control);
+  const handleRelease = () => {
+    pressedTouchControls.delete(control);
     button.classList.remove("pressed");
   };
-  button.addEventListener("pointerdown", press);
-  button.addEventListener("pointerup", release);
-  button.addEventListener("pointercancel", release);
-  button.addEventListener("lostpointercapture", release);
+  button.addEventListener("pointerdown", handlePress);
+  button.addEventListener("pointerup", handleRelease);
+  button.addEventListener("pointercancel", handleRelease);
+  button.addEventListener("lostpointercapture", handleRelease);
 });
 
+// Opposite held directions cancel. Scale the remaining request by the Teleop slider.
 function driverInput() {
-  const active = new Set([...keys, ...touches]);
-  const throttle = (active.has("forward") ? 1 : 0) - (active.has("reverse") ? 1 : 0);
-  const turn = (active.has("right") ? 1 : 0) - (active.has("left") ? 1 : 0);
-  return { throttle: throttle * speedLimit, turn: turn * speedLimit };
+  const activeControls = new Set([...pressedKeyboardControls, ...pressedTouchControls]);
+  const forwardInput = (activeControls.has("forward") ? 1 : 0) - (activeControls.has("reverse") ? 1 : 0);
+  const turningInput = (activeControls.has("right") ? 1 : 0) - (activeControls.has("left") ? 1 : 0);
+  return { throttle: forwardInput * driverSpeedLimitFraction, turn: turningInput * driverSpeedLimitFraction };
 }
 
+// Choose who controls the motors on this step. Auto ignores manual drive inputs.
+// stepRobot() applies the disabled/E-stop checks to either source of commands.
 function command() {
-  if (state.mode === "auto") return autoCommand(state);
-  const input = driverInput();
-  return arcadeDrive(input.throttle, input.turn);
+  if (robotState.mode === "auto") return autoCommand(robotState);
+  const driverCommand = driverInput();
+  return arcadeDrive(driverCommand.throttle, driverCommand.turn);
 }
 
+// Match drawing resolution to the displayed size, including high-density screens.
 function resizeCanvas() {
-  const rect = canvas.getBoundingClientRect();
-  const ratio = Math.min(window.devicePixelRatio || 1, 2);
-  const width = Math.round(rect.width * ratio);
-  const height = Math.round(rect.height * ratio);
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
+  const canvasBounds = fieldCanvas.getBoundingClientRect();
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const canvasWidthPixels = Math.round(canvasBounds.width * pixelRatio);
+  const canvasHeightPixels = Math.round(canvasBounds.height * pixelRatio);
+  if (fieldCanvas.width !== canvasWidthPixels || fieldCanvas.height !== canvasHeightPixels) {
+    fieldCanvas.width = canvasWidthPixels;
+    fieldCanvas.height = canvasHeightPixels;
   }
 }
 
+// Drawing reads robotState without changing physics. The field uses meters and
+// upward-positive Y; the canvas uses pixels and downward-positive Y.
 function drawField() {
   resizeCanvas();
-  const w = canvas.width;
-  const h = canvas.height;
-  const sx = w / FIELD.width;
-  const sy = h / FIELD.height;
-  const scale = Math.min(sx, sy);
-  context.clearRect(0, 0, w, h);
+  const canvasWidthPixels = fieldCanvas.width;
+  const canvasHeightPixels = fieldCanvas.height;
+  const pixelsPerMeterX = canvasWidthPixels / FIELD.width;
+  const pixelsPerMeterY = canvasHeightPixels / FIELD.height;
+  const pixelsPerMeter = Math.min(pixelsPerMeterX, pixelsPerMeterY);
+  drawingContext.clearRect(0, 0, canvasWidthPixels, canvasHeightPixels);
 
-  const gradient = context.createLinearGradient(0, 0, w, h);
-  gradient.addColorStop(0, "#0b1b29");
-  gradient.addColorStop(1, "#08131e");
-  context.fillStyle = gradient;
-  context.fillRect(0, 0, w, h);
+  const fieldGradient = drawingContext.createLinearGradient(0, 0, canvasWidthPixels, canvasHeightPixels);
+  fieldGradient.addColorStop(0, "#0b1b29");
+  fieldGradient.addColorStop(1, "#08131e");
+  drawingContext.fillStyle = fieldGradient;
+  drawingContext.fillRect(0, 0, canvasWidthPixels, canvasHeightPixels);
 
-  context.strokeStyle = "rgba(113, 151, 182, .14)";
-  context.lineWidth = 1;
-  for (let x = 0; x <= FIELD.width; x += 1) {
-    context.beginPath(); context.moveTo(x * sx, 0); context.lineTo(x * sx, h); context.stroke();
+  // Draw a one-meter grid before adding obstacles, the target, and the robot.
+  drawingContext.strokeStyle = "rgba(113, 151, 182, .14)";
+  drawingContext.lineWidth = 1;
+  for (let gridXMeter = 0; gridXMeter <= FIELD.width; gridXMeter += 1) {
+    drawingContext.beginPath();
+    drawingContext.moveTo(gridXMeter * pixelsPerMeterX, 0);
+    drawingContext.lineTo(gridXMeter * pixelsPerMeterX, canvasHeightPixels);
+    drawingContext.stroke();
   }
-  for (let y = 0; y <= FIELD.height; y += 1) {
-    context.beginPath(); context.moveTo(0, y * sy); context.lineTo(w, y * sy); context.stroke();
-  }
-
-  context.strokeStyle = "rgba(55, 213, 238, .36)";
-  context.lineWidth = Math.max(1, scale * .025);
-  context.strokeRect(1, 1, w - 2, h - 2);
-  context.beginPath(); context.moveTo(w / 2, 0); context.lineTo(w / 2, h); context.stroke();
-
-  context.fillStyle = "#e5604d";
-  context.strokeStyle = "rgba(255, 214, 205, .7)";
-  for (const block of BARRICADES) {
-    const bx = block.x * sx;
-    const by = h - (block.y + block.height) * sy;
-    context.fillRect(bx, by, block.width * sx, block.height * sy);
-    context.strokeRect(bx, by, block.width * sx, block.height * sy);
+  for (let gridYMeter = 0; gridYMeter <= FIELD.height; gridYMeter += 1) {
+    drawingContext.beginPath();
+    drawingContext.moveTo(0, gridYMeter * pixelsPerMeterY);
+    drawingContext.lineTo(canvasWidthPixels, gridYMeter * pixelsPerMeterY);
+    drawingContext.stroke();
   }
 
-  const tx = TARGET.x * sx;
-  const ty = h - TARGET.y * sy;
-  context.fillStyle = "#ffb84a";
-  context.shadowColor = "#ffb84a";
-  context.shadowBlur = scale * .18;
-  context.fillRect(tx - scale * .08, ty - scale * .35, scale * .16, scale * .7);
-  context.shadowBlur = 0;
+  drawingContext.strokeStyle = "rgba(55, 213, 238, .36)";
+  drawingContext.lineWidth = Math.max(1, pixelsPerMeter * .025);
+  drawingContext.strokeRect(1, 1, canvasWidthPixels - 2, canvasHeightPixels - 2);
+  drawingContext.beginPath();
+  drawingContext.moveTo(canvasWidthPixels / 2, 0);
+  drawingContext.lineTo(canvasWidthPixels / 2, canvasHeightPixels);
+  drawingContext.stroke();
 
-  const vision = limelightMeasurement(state);
-  if (vision.tv) {
-    context.setLineDash([scale * .1, scale * .09]);
-    context.strokeStyle = "rgba(255,184,74,.55)";
-    context.beginPath();
-    context.moveTo(state.x * sx, h - state.y * sy);
-    context.lineTo(tx, ty);
-    context.stroke();
-    context.setLineDash([]);
+  drawingContext.fillStyle = "#e5604d";
+  drawingContext.strokeStyle = "rgba(255, 214, 205, .7)";
+  for (const barricade of BARRICADES) {
+    const barricadeXPixel = barricade.x * pixelsPerMeterX;
+    const barricadeYPixel = canvasHeightPixels - (barricade.y + barricade.height) * pixelsPerMeterY;
+    drawingContext.fillRect(barricadeXPixel, barricadeYPixel, barricade.width * pixelsPerMeterX, barricade.height * pixelsPerMeterY);
+    drawingContext.strokeRect(barricadeXPixel, barricadeYPixel, barricade.width * pixelsPerMeterX, barricade.height * pixelsPerMeterY);
   }
 
-  const x = state.x * sx;
-  const y = h - state.y * sy;
-  context.save();
-  context.translate(x, y);
-  context.rotate(-state.heading);
-  const rw = ROBOT.length * scale;
-  const rh = ROBOT.width * scale;
-  context.shadowColor = "rgba(55,213,238,.5)";
-  context.shadowBlur = scale * .15;
-  context.fillStyle = "#37d5ee";
-  context.fillRect(-rw / 2, -rh / 2, rw, rh);
-  context.shadowBlur = 0;
-  context.fillStyle = "#06101a";
-  context.fillRect(rw * .12, -rh * .27, rw * .31, rh * .54);
-  context.fillStyle = "#ffb84a";
-  context.beginPath();
-  context.moveTo(rw * .46, 0); context.lineTo(rw * .22, -rh * .18); context.lineTo(rw * .22, rh * .18); context.closePath(); context.fill();
-  context.restore();
+  const targetXPixel = TARGET.x * pixelsPerMeterX;
+  const targetYPixel = canvasHeightPixels - TARGET.y * pixelsPerMeterY;
+  drawingContext.fillStyle = "#ffb84a";
+  drawingContext.shadowColor = "#ffb84a";
+  drawingContext.shadowBlur = pixelsPerMeter * .18;
+  drawingContext.fillRect(targetXPixel - pixelsPerMeter * .08, targetYPixel - pixelsPerMeter * .35, pixelsPerMeter * .16, pixelsPerMeter * .7);
+  drawingContext.shadowBlur = 0;
+
+  // Show a dashed sight line only when the simulated camera sees the target.
+  const targetMeasurement = limelightMeasurement(robotState);
+  if (targetMeasurement.tv) {
+    drawingContext.setLineDash([pixelsPerMeter * .1, pixelsPerMeter * .09]);
+    drawingContext.strokeStyle = "rgba(255,184,74,.55)";
+    drawingContext.beginPath();
+    drawingContext.moveTo(robotState.x * pixelsPerMeterX, canvasHeightPixels - robotState.y * pixelsPerMeterY);
+    drawingContext.lineTo(targetXPixel, targetYPixel);
+    drawingContext.stroke();
+    drawingContext.setLineDash([]);
+  }
+
+  const robotXPixel = robotState.x * pixelsPerMeterX;
+  const robotYPixel = canvasHeightPixels - robotState.y * pixelsPerMeterY;
+  // Save/restore keeps this robot-only rotation from affecting the next drawing.
+  drawingContext.save();
+  drawingContext.translate(robotXPixel, robotYPixel);
+  drawingContext.rotate(-robotState.heading);
+  const robotLengthPixels = ROBOT.length * pixelsPerMeter;
+  const robotWidthPixels = ROBOT.width * pixelsPerMeter;
+  drawingContext.shadowColor = "rgba(55,213,238,.5)";
+  drawingContext.shadowBlur = pixelsPerMeter * .15;
+  drawingContext.fillStyle = "#37d5ee";
+  drawingContext.fillRect(-robotLengthPixels / 2, -robotWidthPixels / 2, robotLengthPixels, robotWidthPixels);
+  drawingContext.shadowBlur = 0;
+  drawingContext.fillStyle = "#06101a";
+  drawingContext.fillRect(robotLengthPixels * .12, -robotWidthPixels * .27, robotLengthPixels * .31, robotWidthPixels * .54);
+  drawingContext.fillStyle = "#ffb84a";
+  drawingContext.beginPath();
+  drawingContext.moveTo(robotLengthPixels * .46, 0);
+  drawingContext.lineTo(robotLengthPixels * .22, -robotWidthPixels * .18);
+  drawingContext.lineTo(robotLengthPixels * .22, robotWidthPixels * .18);
+  drawingContext.closePath();
+  drawingContext.fill();
+  drawingContext.restore();
 }
 
+// Convert the latest model values to dashboard text, percentages, and bar widths.
 function updateUI() {
-  const vision = limelightMeasurement(state);
-  const degrees = state.heading * 180 / Math.PI;
-  $("#leftSpeed").textContent = state.leftVelocity.toFixed(2);
-  $("#rightSpeed").textContent = state.rightVelocity.toFixed(2);
-  $("#headingValue").textContent = degrees.toFixed(1);
-  $("#batteryValue").textContent = state.battery.toFixed(1);
-  $("#poseReadout").textContent = `X ${state.x.toFixed(2)} m · Y ${state.y.toFixed(2)} m · ${degrees.toFixed(0)}°`;
-  $("#collisionReadout").textContent = `Contacts ${state.collisions}`;
-  $("#tvValue").textContent = vision.tv ? "1" : "0";
-  $("#txValue").textContent = `${vision.tx.toFixed(1)}°`;
-  $("#tyValue").textContent = `${vision.ty.toFixed(1)}°`;
-  $("#taValue").textContent = `${vision.ta.toFixed(2)}%`;
-  $("#rangeValue").textContent = `${vision.distance.toFixed(2)} m`;
-  $("#targetBadge").textContent = vision.tv ? "TARGET LOCK" : "NO TARGET";
-  $("#targetBadge").classList.toggle("no-target", !vision.tv);
+  const targetMeasurement = limelightMeasurement(robotState);
+  const headingDegrees = robotState.heading * 180 / Math.PI;
+  findElement("#leftSpeed").textContent = robotState.leftVelocity.toFixed(2);
+  findElement("#rightSpeed").textContent = robotState.rightVelocity.toFixed(2);
+  findElement("#headingValue").textContent = headingDegrees.toFixed(1);
+  findElement("#batteryValue").textContent = robotState.battery.toFixed(1);
+  findElement("#poseReadout").textContent = `X ${robotState.x.toFixed(2)} m · Y ${robotState.y.toFixed(2)} m · ${headingDegrees.toFixed(0)}°`;
+  findElement("#collisionReadout").textContent = `Contacts ${robotState.collisions}`;
+  findElement("#tvValue").textContent = targetMeasurement.tv ? "1" : "0";
+  findElement("#txValue").textContent = `${targetMeasurement.tx.toFixed(1)}°`;
+  findElement("#tyValue").textContent = `${targetMeasurement.ty.toFixed(1)}°`;
+  findElement("#taValue").textContent = `${targetMeasurement.ta.toFixed(2)}%`;
+  findElement("#rangeValue").textContent = `${targetMeasurement.distance.toFixed(2)} m`;
+  findElement("#targetBadge").textContent = targetMeasurement.tv ? "TARGET LOCK" : "NO TARGET";
+  findElement("#targetBadge").classList.toggle("no-target", !targetMeasurement.tv);
 
-  const input = state.mode === "auto"
-    ? { throttle: (state.leftCommand + state.rightCommand) / 2, turn: (state.leftCommand - state.rightCommand) / 2 }
+  // In Auto, reconstruct the displayed inputs from actual motor commands.
+  const driverCommand = robotState.mode === "auto"
+    ? { throttle: (robotState.leftCommand + robotState.rightCommand) / 2, turn: (robotState.leftCommand - robotState.rightCommand) / 2 }
     : driverInput();
-  $("#throttleValue").textContent = `${Math.round(input.throttle * 100)}%`;
-  $("#turnValue").textContent = `${Math.round(input.turn * 100)}%`;
-  $("#throttleBar").style.width = `${Math.abs(input.throttle) * 100}%`;
-  const turnBar = $("#turnBar");
-  turnBar.style.width = `${Math.abs(input.turn) * 50}%`;
-  turnBar.style.left = input.turn < 0 ? `${50 - Math.abs(input.turn) * 50}%` : "50%";
+  findElement("#throttleValue").textContent = `${Math.round(driverCommand.throttle * 100)}%`;
+  findElement("#turnValue").textContent = `${Math.round(driverCommand.turn * 100)}%`;
+  findElement("#throttleBar").style.width = `${Math.abs(driverCommand.throttle) * 100}%`;
+  const turnBar = findElement("#turnBar");
+  turnBar.style.width = `${Math.abs(driverCommand.turn) * 50}%`;
+  turnBar.style.left = driverCommand.turn < 0 ? `${50 - Math.abs(driverCommand.turn) * 50}%` : "50%";
 }
 
-function frame(now) {
-  accumulator += Math.min((now - lastTime) / 1000, 0.1);
-  lastTime = now;
-  while (accumulator >= fixedStep) {
-    const nextCommand = command();
-    state = stepRobot(state, nextCommand, fixedStep);
-    accumulator -= fixedStep;
+// Browsers redraw at varying rates. Accumulate real time, then advance physics
+// in fixed 20 ms chunks. Limit catch-up to 0.1 seconds after a pause or slow frame.
+function frame(frameTimeMs) {
+  pendingSimulationSeconds += Math.min((frameTimeMs - previousFrameTimeMs) / 1000, 0.1);
+  previousFrameTimeMs = frameTimeMs;
+  while (pendingSimulationSeconds >= physicsStepSeconds) {
+    // Read controls -> choose motor power -> update the robot. Repeat as needed.
+    const motorCommand = command();
+    robotState = stepRobot(robotState, motorCommand, physicsStepSeconds);
+    pendingSimulationSeconds -= physicsStepSeconds;
   }
+  // Render after the physics catches up, then ask the browser for another frame.
   drawField();
   updateUI();
   requestAnimationFrame(frame);
 }
 
+// The Node server supplies addresses; this only displays a phone-access hint.
 async function showNetworkHelp() {
   try {
     const response = await fetch("/api/network");
-    const info = await response.json();
-    const tailscale = info.addresses.find((item) => item.kind === "tailscale");
-    const lan = info.addresses.find((item) => item.kind === "lan");
-    if (tailscale) {
-      $("#networkHelp").innerHTML = `<strong>Phone-ready:</strong> open http://${tailscale.address}:${info.port} on a device signed into your Tailscale network.`;
-    } else if (lan) {
-      $("#networkHelp").innerHTML = `<strong>Local network:</strong> open http://${lan.address}:${info.port} on the same Wi-Fi. Start Tailscale to expose a private 100.x address.`;
+    const networkInfo = await response.json();
+    const tailscaleAddress = networkInfo.addresses.find((networkAddress) => networkAddress.kind === "tailscale");
+    const localNetworkAddress = networkInfo.addresses.find((networkAddress) => networkAddress.kind === "lan");
+    if (tailscaleAddress) {
+      findElement("#networkHelp").innerHTML = `<strong>Phone-ready:</strong> open http://${tailscaleAddress.address}:${networkInfo.port} on a device signed into your Tailscale network.`;
+    } else if (localNetworkAddress) {
+      findElement("#networkHelp").innerHTML = `<strong>Local network:</strong> open http://${localNetworkAddress.address}:${networkInfo.port} on the same Wi-Fi. Start Tailscale to expose a private 100.x address.`;
     } else {
-      $("#networkHelp").textContent = `Phone access appears here when a network adapter is active.`;
+      findElement("#networkHelp").textContent = `Phone access appears here when a network adapter is active.`;
     }
   } catch {
-    $("#networkHelp").textContent = "Phone access details are available when the local server is running.";
+    findElement("#networkHelp").textContent = "Phone access details are available when the local server is running.";
   }
 }
 
+// Start the page with outputs disabled. Drawing continues in every mode.
 showNetworkHelp();
 setMode("disabled");
 requestAnimationFrame(frame);

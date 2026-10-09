@@ -2,33 +2,40 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { BARRICADES, FIELD, arcadeDrive, autoCommand, initialState, limelightMeasurement, stepRobot } from "../src/simulator.mjs";
 
-function run(state, command, seconds) {
-  let next = state;
-  for (let elapsed = 0; elapsed < seconds; elapsed += 0.02) next = stepRobot(next, command, 0.02);
-  return next;
+// Hold one motor command for the requested duration in 20 ms physics steps.
+// Auto needs a different loop below because it recalculates commands as it moves.
+function simulateForSeconds(startingState, motorCommand, durationSeconds) {
+  let robotState = startingState;
+  const timeStepSeconds = 0.02;
+  for (let elapsedSeconds = 0; elapsedSeconds < durationSeconds; elapsedSeconds += timeStepSeconds) {
+    robotState = stepRobot(robotState, motorCommand, timeStepSeconds);
+  }
+  return robotState;
 }
 
+// Each test creates a state, performs an action, then checks the expected outcome.
+// assert.equal checks equality; assert.ok checks whether a condition is true.
 test("disabled robot ignores drive output", () => {
-  const start = initialState();
-  const end = run(start, { left: 1, right: 1 }, 1);
-  assert.equal(end.x, start.x);
-  assert.equal(end.y, start.y);
-  assert.equal(end.leftCommand, 0);
+  const startingState = initialState();
+  const endingState = simulateForSeconds(startingState, { left: 1, right: 1 }, 1);
+  assert.equal(endingState.x, startingState.x);
+  assert.equal(endingState.y, startingState.y);
+  assert.equal(endingState.leftCommand, 0);
 });
 
 test("enabled drivetrain moves forward and voltage sags under load", () => {
-  const start = { ...initialState(), enabled: true, mode: "teleop" };
-  const end = run(start, { left: 0.7, right: 0.7 }, 1);
-  assert.ok(end.x > start.x + 2);
-  assert.ok(Math.abs(end.y - start.y) < 0.001);
-  assert.ok(end.battery < 12.6);
+  const startingState = { ...initialState(), enabled: true, mode: "teleop" };
+  const endingState = simulateForSeconds(startingState, { left: 0.7, right: 0.7 }, 1);
+  assert.ok(endingState.x > startingState.x + 2);
+  assert.ok(Math.abs(endingState.y - startingState.y) < 0.001);
+  assert.ok(endingState.battery < 12.6);
 });
 
 test("opposed wheel speeds turn the robot in place", () => {
-  const start = { ...initialState(), enabled: true, mode: "teleop" };
-  const end = run(start, { left: 0.4, right: -0.4 }, 0.6);
-  assert.ok(Math.abs(end.heading) > 1);
-  assert.ok(Math.abs(end.x - start.x) < 0.05);
+  const startingState = { ...initialState(), enabled: true, mode: "teleop" };
+  const endingState = simulateForSeconds(startingState, { left: 0.4, right: -0.4 }, 0.6);
+  assert.ok(Math.abs(endingState.heading) > 1);
+  assert.ok(Math.abs(endingState.x - startingState.x) < 0.05);
 });
 
 test("arcade drive output stays normalized", () => {
@@ -37,36 +44,39 @@ test("arcade drive output stays normalized", () => {
 });
 
 test("Limelight-style target solution reports a centered target", () => {
-  const state = { ...initialState(), x: 5, y: FIELD.height / 2, heading: 0 };
-  const measurement = limelightMeasurement(state);
-  assert.equal(measurement.tv, true);
-  assert.ok(Math.abs(measurement.tx) < 0.001);
-  assert.ok(measurement.distance > 9);
+  const robotState = { ...initialState(), x: 5, y: FIELD.height / 2, heading: 0 };
+  const targetMeasurement = limelightMeasurement(robotState);
+  assert.equal(targetMeasurement.tv, true);
+  assert.ok(Math.abs(targetMeasurement.tx) < 0.001);
+  assert.ok(targetMeasurement.distance > 9);
 });
 
 test("auto command stops near the target", () => {
-  const state = { ...initialState(), x: 13.4, y: FIELD.height / 2, heading: 0 };
-  assert.equal(autoCommand(state).complete, true);
+  const robotState = { ...initialState(), x: 13.4, y: FIELD.height / 2, heading: 0 };
+  assert.equal(autoCommand(robotState).complete, true);
 });
 
 test("field boundaries contain the robot", () => {
-  const start = { ...initialState(), x: FIELD.width - 0.5, enabled: true, mode: "teleop" };
-  const end = run(start, { left: 1, right: 1 }, 2);
-  assert.ok(end.x < FIELD.width);
-  assert.ok(end.collisions > 0);
+  const startingState = { ...initialState(), x: FIELD.width - 0.5, enabled: true, mode: "teleop" };
+  const endingState = simulateForSeconds(startingState, { left: 1, right: 1 }, 2);
+  assert.ok(endingState.x < FIELD.width);
+  assert.ok(endingState.collisions > 0);
 });
 
 test("barricades stop the robot", () => {
-  const block = BARRICADES[0];
-  const start = { ...initialState(), y: block.y + block.height / 2, enabled: true, mode: "teleop" };
-  const end = run(start, { left: 1, right: 1 }, 3);
-  assert.ok(end.x < block.x);
-  assert.ok(end.collisions > 0);
+  const barricade = BARRICADES[0];
+  const startingState = { ...initialState(), y: barricade.y + barricade.height / 2, enabled: true, mode: "teleop" };
+  const endingState = simulateForSeconds(startingState, { left: 1, right: 1 }, 3);
+  assert.ok(endingState.x < barricade.x);
+  assert.ok(endingState.collisions > 0);
 });
 
 test("auto routine reaches the target without touching a barricade", () => {
-  let state = { ...initialState(), enabled: true, mode: "auto" };
-  for (let step = 0; step < 1500 && !autoCommand(state).complete; step += 1) state = stepRobot(state, autoCommand(state), 0.02);
-  assert.equal(autoCommand(state).complete, true);
-  assert.equal(state.collisions, 0);
+  let robotState = { ...initialState(), enabled: true, mode: "auto" };
+  // Allow at most 30 simulated seconds. Recalculate Auto's command on every step.
+  for (let stepNumber = 0; stepNumber < 1500 && !autoCommand(robotState).complete; stepNumber += 1) {
+    robotState = stepRobot(robotState, autoCommand(robotState), 0.02);
+  }
+  assert.equal(autoCommand(robotState).complete, true);
+  assert.equal(robotState.collisions, 0);
 });
