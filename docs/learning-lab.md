@@ -169,7 +169,7 @@ Model limits: a two-NEO-per-side differential drivetrain, an ideal heading senso
 
 ## Maintainer notes
 
-Run `npm test` for the original model, input validation, control lease, NT4 websocket tests, and server routes. Run `npm run test:java` for the Java controller, camera, and packet tests. `npm run robot -- build` builds and tests the full Java project. The Java tests require JDK 25 and download dependencies on the first run.
+Run `npm test` for the original model, input validation, control lease, NT4 websocket tests, server routes, and pose playback (arrival jitter, heading wrap, resets, and disconnects). Run `npm run test:java` for the Java controller, camera, and packet tests. `npm run robot -- build` builds and tests the full Java project. The Java tests require JDK 25 and download dependencies on the first run.
 
 Manual integration check: start both processes, drive with W/A/S/D and buttons, use Escape, run Auto to its stop, cover/uncover its camera, inject encoder error, reset, and stop/restart the robot process. Losing control traffic must disable outputs; reconnecting must require a new Enable action. Check both wide and narrow browser layouts.
 
@@ -187,7 +187,13 @@ The browser posts JSON controls to `/api/lab/controls` and receives SSE telemetr
 | 8 | Reset counter; applied only while disabled |
 | 9 | Heartbeat sequence; only a changed sequence refreshes Java's 600 ms watchdog |
 
-`/LearningLab/telemetry` is a JSON string with `schema: 1`, `simulation: true`, a changing `sequence`, enabled/mode, true and estimated position, encoders/speeds, motor requests, voltage, camera reading, status, and lifecycle label. The bridge requires fresh telemetry, syncs its NT4 timestamps to the server, grants one browser a 500 ms control lease, and requires a disabled handshake after expiry/reconnection. These are classroom simulation guards, not a hardware safety system. Physics runs every 20 ms; telemetry runs at 10 Hz. The browser uses `DriverStationSim` through the Java project; it is not the official Systemcore Driver Station.
+`/LearningLab/telemetry` is a JSON string with `schema: 2`, `simulation: true`, a changing `sequence`, monotonic `sampleTimeSeconds`, a `poseResetSequence`, enabled/mode, true and estimated position, encoders/speeds, motor requests, voltage, camera reading, status, and lifecycle label.
+
+The bridge requires fresh telemetry, syncs its NT4 timestamps to the server, grants one browser a 500 ms control lease, and requires a disabled handshake after expiry/reconnection. These are classroom simulation guards, not a hardware safety system.
+
+Physics and pose telemetry run every 20 ms (50 Hz). The bridge forwards new measurements immediately. The browser draws at the display frame rate, interpolating timestamped poses with a 60 ms buffer; numerical readouts remain at 10 Hz. Both the actual and estimated pose use the same playback time. Field resets snap to the new pose, and playback never predicts motion beyond received measurements. Key/button changes send immediately; the 100 ms control heartbeat remains in place.
+
+After upgrading from telemetry schema 1, restart both `npm start` and `npm run robot`, then refresh the page. The browser uses `DriverStationSim` through the Java project; it is not the official Systemcore Driver Station.
 
 Official references:
 

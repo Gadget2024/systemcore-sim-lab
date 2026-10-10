@@ -6,7 +6,8 @@ import { WebSocketServer } from 'ws';
 import { encode, decodeMulti } from '@msgpack/msgpack';
 import { Nt4Bridge, validTelemetry } from '../lib/nt4-bridge.mjs';
 
-const telemetry = { schema: 1, sequence: 1, simulation: true, enabled: false, mode: 'teleop', x: 4, y: 4,
+const telemetry = { schema: 2, sequence: 1, sampleTimeSeconds: 1, poseResetSequence: 0,
+  simulation: true, enabled: false, mode: 'teleop', x: 4, y: 4,
   heading: 0, estimatedX: 4, estimatedY: 4, leftEncoder: 0, rightEncoder: 0, leftSpeed: 0, rightSpeed: 0,
   leftPower: 0, rightPower: 0, battery: 12, poseError: 0, targetVisible: true, targetDistance: 10,
   targetBearing: 0, status: 'Disabled', lifecycle: 'Teleop.end()' };
@@ -25,6 +26,7 @@ async function fixture(t) {
     socket.on('message', (data, binary) => {
       if (!binary) {
         for (const message of JSON.parse(data.toString())) if (message.method === 'subscribe') {
+          state.subscriptionPeriod = message.params.options.periodic;
           socket.send(JSON.stringify([{ method: 'announce', params: { name: '/LearningLab/telemetry', id: 7, type: 'string', properties: {} } }]));
         }
         return;
@@ -48,9 +50,22 @@ async function fixture(t) {
 
 test('only compatible simulation telemetry is accepted', () => {
   assert.ok(validTelemetry(telemetry));
-  for (const update of [{ simulation: false }, { schema: 2 }, { x: NaN }, { sequence: undefined }, { status: {} }]) {
+  for (const update of [{ simulation: false }, { schema: 1 }, { x: NaN }, { sequence: undefined },
+    { sampleTimeSeconds: NaN }, { poseResetSequence: -1 }, { status: {} }]) {
     assert.equal(validTelemetry({ ...telemetry, ...update }), false);
   }
+});
+
+test('new pose measurements reach the dashboard without waiting for the watchdog timer', async t => {
+  const { bridge, state } = await fixture(t);
+  assert.equal(state.subscriptionPeriod, .02);
+  state.publishing = false;
+  clearInterval(bridge.timer);
+  let received;
+  bridge.on('snapshot', snapshot => { received = snapshot.telemetry; });
+  state.socket.send(encode([7, 1000000, 4, JSON.stringify({ ...telemetry, sequence: 500, x: 5 })]));
+  await until(() => received?.sequence === 500);
+  assert.equal(received.x, 5);
 });
 
 test('NT4 clock sync, publication, and idle heartbeat work over a real websocket', async t => {
