@@ -1,3 +1,5 @@
+import { PosePlayback } from "./pose-playback.mjs";
+
 const find = selector => document.querySelector(selector);
 const lessons = [
   { title: "Take the wheel", mode: "teleop", description: "A robot follows commands, then reports what its sensors measured.", steps: ["Keep the routine on Teleop. Enable the robot and hold W or ▲ briefly.", "Release the control. Watch the wheel speeds settle and both encoder distances change.", "Turn with A/D or ◀/▶. Disable the robot before resetting the field."], question: "Why do the two encoder distances change by different amounts when the robot turns?", code: "wpilib-robot/src/main/java/lab/robot/opmode/DriveLesson.java → periodic() → Robot.runTeleop(). SimDrive.java turns motor requests into encoder measurements." },
@@ -15,6 +17,9 @@ let desiredEnabled = false;
 let resetCounter = 0;
 let latestTelemetry = null;
 let sending = false;
+let controlsPending = false;
+let lastReadoutTimeMs = -Infinity;
+const posePlayback = new PosePlayback();
 const isLocalBrowser = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
 // Remote visitors can read lessons, but controls belong on the robot's computer.
 const clientId = isLocalBrowser ? crypto.randomUUID() : "remote-preview-only";
@@ -71,7 +76,10 @@ function readDriverControls() {
     cameraCovered: find("#cameraCovered").checked, encoderSlip: find("#encoderSlip").checked, resetCounter };
 }
 async function sendControls() {
-  if (sending || document.hidden || !isLocalBrowser) return;
+  if (document.hidden || !isLocalBrowser) return;
+  // Coalesce input changes while a request is in flight, then send the newest state.
+  // Key releases and Disable should not have to wait for the next heartbeat tick.
+  if (sending) { controlsPending = true; return; }
   sending = true;
   try {
     const controls = readDriverControls();
@@ -87,7 +95,10 @@ async function sendControls() {
       controlsReady = true;
     }
   } catch { controlsReady = false; desiredEnabled = false; find("#controlNotice").textContent = "Connection interrupted — controls disabled."; }
-  finally { sending = false; updateButtons(); }
+  finally {
+    sending = false; updateButtons();
+    if (controlsPending) { controlsPending = false; void sendControls(); }
+  }
 }
 find("#enableRobot").addEventListener("click", () => { if (!connected || !controlsReady) return; desiredEnabled = true; find("#controlNotice").textContent = "Robot enabled. Press Escape or Disable to stop."; updateButtons(); void sendControls(); });
 for (const id of ["#disableRobot", "#stopRobot"]) find(id).addEventListener("click", () => disable());
@@ -96,15 +107,22 @@ find("#labMode").addEventListener("change", () => disable());
 for (const id of ["#labPower", "#labStopDistance"]) find(id).addEventListener("input", () => {
   find("#labPowerValue").textContent = `${find("#labPower").value}%`;
   find("#labStopValue").textContent = `${Number(find("#labStopDistance").value).toFixed(1)} m`;
+  void sendControls();
 });
+for (const id of ["#cameraCovered", "#encoderSlip"]) find(id).addEventListener("change", () => void sendControls());
 window.addEventListener("keydown", event => {
   if (event.key === "Escape") { disable(); return; }
   // Let arrows operate form fields normally when a student is editing a setting.
   if (event.target.closest("input, select, textarea, [contenteditable]")) return;
   const direction = keys.get(event.key.toLowerCase());
-  if (direction) { event.preventDefault(); keyboardDirections.add(direction); }
+  if (direction) {
+    event.preventDefault();
+    if (!keyboardDirections.has(direction)) { keyboardDirections.add(direction); void sendControls(); }
+  }
 });
-window.addEventListener("keyup", event => { keyboardDirections.delete(keys.get(event.key.toLowerCase())); });
+window.addEventListener("keyup", event => {
+  if (keyboardDirections.delete(keys.get(event.key.toLowerCase()))) void sendControls();
+});
 window.addEventListener("blur", () => disable("Paused because this window lost focus. Enable when ready."));
 document.addEventListener("visibilitychange", () => { if (document.hidden) disable("Paused while this tab was away. Enable when ready."); });
 window.addEventListener("pagehide", () => {
@@ -113,14 +131,30 @@ window.addEventListener("pagehide", () => {
 });
 for (const button of document.querySelectorAll("[data-lab-direction]")) {
   const direction = button.dataset.labDirection;
-  button.addEventListener("pointerdown", event => { event.preventDefault(); touchDirections.add(direction); button.classList.add("pressed"); button.setPointerCapture(event.pointerId); });
-  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) button.addEventListener(type, () => { touchDirections.delete(direction); button.classList.remove("pressed"); });
+  button.addEventListener("pointerdown", event => {
+    event.preventDefault(); touchDirections.add(direction); button.classList.add("pressed");
+    button.setPointerCapture(event.pointerId); void sendControls();
+  });
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) button.addEventListener(type, () => {
+    if (touchDirections.delete(direction)) void sendControls();
+    button.classList.remove("pressed");
+  });
 }
 
 function showTelemetry(snapshot) {
   const wasConnected = connected;
+  const previousTelemetry = latestTelemetry;
   connected = snapshot.connected;
   latestTelemetry = snapshot.telemetry;
+  const receivedAtMs = performance.now();
+  if (connected) posePlayback.add(latestTelemetry, receivedAtMs);
+  else posePlayback.clear();
+  // Keep readable numbers at 10 Hz; connection/mode changes still appear immediately.
+  const stateChanged = connected !== wasConnected || latestTelemetry?.enabled !== previousTelemetry?.enabled
+    || latestTelemetry?.mode !== previousTelemetry?.mode
+    || latestTelemetry?.status !== previousTelemetry?.status;
+  if (!stateChanged && receivedAtMs - lastReadoutTimeMs < 100) return;
+  lastReadoutTimeMs = receivedAtMs;
   find("#connectionDot").classList.toggle("ready", connected);
   find("#connectionLabel").textContent = connected ? "Your robot is connected" : "Waiting for robot code";
   find("#connectionDetail").textContent = connected ? "Measurements are coming from your running WPILib project." : snapshot.message;
@@ -142,7 +176,7 @@ function showTelemetry(snapshot) {
     find("#motorPower").textContent = `${Math.round(robot.leftPower * 100)}% / ${Math.round(robot.rightPower * 100)}%`;
     find("#lifecycle").textContent = robot.lifecycle;
   }
-  updateButtons(); drawField();
+  updateButtons();
 }
 if (isLocalBrowser) {
   const events = new EventSource("/api/lab/events");
@@ -153,7 +187,7 @@ if (isLocalBrowser) {
   find("#controlNotice").textContent = "You can read the lessons here. Use the server computer for Java robot controls.";
 }
 
-function drawField() {
+function drawField(frameTimeMs) {
   const canvas = find("#labField"); const context = canvas.getContext("2d");
   const width = canvas.width; const height = canvas.height;
   const scaleX = width / 16.54; const scaleY = height / 8.21; const scale = Math.min(scaleX, scaleY);
@@ -164,8 +198,8 @@ function drawField() {
   const targetX = 14.65 * scaleX; const targetY = height - 4.105 * scaleY;
   context.strokeStyle = "#ffb84a55"; context.setLineDash([6, 6]); context.beginPath(); context.ellipse(targetX, targetY, Number(find("#labStopDistance").value) * scaleX, Number(find("#labStopDistance").value) * scaleY, 0, 0, Math.PI * 2); context.stroke(); context.setLineDash([]);
   context.fillStyle = "#ffb84a"; context.fillRect(targetX - 5, targetY - 22, 10, 44);
-  if (!latestTelemetry) { context.fillStyle = "#aec5d8"; context.font = "22px system-ui"; context.textAlign = "center"; context.fillText("Connect your robot to see it here", width / 2, height / 2); return; }
-  const robot = latestTelemetry;
+  const robot = posePlayback.at(frameTimeMs);
+  if (!robot) { context.fillStyle = "#aec5d8"; context.font = "22px system-ui"; context.textAlign = "center"; context.fillText("Connect your robot to see it here", width / 2, height / 2); return; }
   for (const estimated of [false, true]) {
     const x = estimated ? robot.estimatedX : robot.x; const y = estimated ? robot.estimatedY : robot.y;
     context.save(); context.translate(x * scaleX, height - y * scaleY); context.rotate(-robot.heading);
@@ -178,5 +212,10 @@ function drawField() {
     context.fillStyle = "#ffb84a"; context.font = "20px system-ui"; context.textAlign = "center"; context.fillText("Outside the practice view — disable and reset", width / 2, 35);
   }
 }
-showLesson(0); drawField();
+showLesson(0);
+function animateField(frameTimeMs) {
+  drawField(frameTimeMs);
+  requestAnimationFrame(animateField);
+}
+requestAnimationFrame(animateField);
 setInterval(() => void sendControls(), 100);

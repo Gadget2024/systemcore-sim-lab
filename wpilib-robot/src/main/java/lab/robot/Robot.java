@@ -32,8 +32,8 @@ public final class Robot extends OpModeRobot {
   private double rightPower;
   private String status = "Disabled";
   private String lifecycle = "Waiting for a mode";
-  private int telemetryDivider;
   private long telemetrySequence;
+  private long poseResetSequence;
 
   public Robot() {
     if (!isSimulation()) throw new IllegalStateException("LearningLab only runs in desktop simulation");
@@ -108,6 +108,7 @@ public final class Robot extends OpModeRobot {
       drive.reset();
       camera.reset();
       odometry.resetPosition(SimDrive.START_POSE.getRotation(), 0, 0, SimDrive.START_POSE);
+      poseResetSequence++;
     }
   }
 
@@ -116,20 +117,22 @@ public final class Robot extends OpModeRobot {
     var sensors = drive.readSensors();
     Pose2d estimatedPose = odometry.update(sensors.heading(), sensors.leftMeters(), sensors.rightMeters());
     camera.update(drive.simulationPose(), driverControls.cameraCovered());
-    // Ten dashboard updates per second; physics still advances at 50 Hz.
-    if (++telemetryDivider % 5 != 0) return;
+    // Send every 20 ms physics step. The browser interpolates these measured poses at
+    // its display's frame rate, while keeping numerical readouts at a slower cadence.
     Pose2d truePose = drive.simulationPose();
     var reading = camera.read();
     double poseError = truePose.getTranslation().getDistance(estimatedPose.getTranslation());
     // Increment a heartbeat even while stationary: NT normally suppresses unchanged values.
     telemetry.set(String.format(Locale.ROOT,
-        "{\"schema\":1,\"sequence\":%d,\"simulation\":true,\"enabled\":%s,\"mode\":\"%s\","
+        "{\"schema\":2,\"sequence\":%d,\"sampleTimeSeconds\":%.6f,\"poseResetSequence\":%d,"
+        + "\"simulation\":true,\"enabled\":%s,\"mode\":\"%s\","
         + "\"x\":%.6f,\"y\":%.6f,\"heading\":%.6f,\"estimatedX\":%.6f,\"estimatedY\":%.6f,"
         + "\"leftEncoder\":%.6f,\"rightEncoder\":%.6f,\"leftSpeed\":%.6f,\"rightSpeed\":%.6f,"
         + "\"leftPower\":%.6f,\"rightPower\":%.6f,\"battery\":%.6f,\"poseError\":%.6f,"
         + "\"targetVisible\":%s,\"targetDistance\":%.6f,\"targetBearing\":%.6f,"
         + "\"status\":\"%s\",\"lifecycle\":\"%s\"}",
-        ++telemetrySequence, RobotState.isEnabled() && freshInput(), driverControls.autonomous() ? "auto" : "teleop",
+        ++telemetrySequence, System.nanoTime() / 1e9, poseResetSequence,
+        RobotState.isEnabled() && freshInput(), driverControls.autonomous() ? "auto" : "teleop",
         truePose.getX(), truePose.getY(), truePose.getRotation().getRadians(), estimatedPose.getX(), estimatedPose.getY(),
         sensors.leftMeters(), sensors.rightMeters(), sensors.leftMetersPerSecond(), sensors.rightMetersPerSecond(),
         leftPower, rightPower, sensors.batteryVolts(), poseError, reading.visible(), reading.distanceMeters(),
